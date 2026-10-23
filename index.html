@@ -148,7 +148,7 @@
         <option value="4">4×</option>
       </select>
       <button class="ctl" id="reset" title="Restore default storm settings">Reset settings</button>
-      <label class="check"><input type="checkbox" id="showWind"> Show wind field</label>
+      <label class="check" id="showWindLabel"><input type="checkbox" id="showWind" checked> Show wind field</label>
     </div>
     <div class="row" id="params"></div>
     <div class="note">
@@ -932,7 +932,6 @@ const SCENES = [
     title: 'Stage 1 — Lifting',
     duration: 45,
     timeScale: 20,      // physical seconds per animation second
-    wind: true,
     controls: [],
     legend: [
       ['rgba(235,240,250,0.5)', 'Warm, moist air'],
@@ -1006,7 +1005,6 @@ const SCENES = [
     title: 'Stage 2 — Freezing & Accretion',
     duration: 45,
     timeScale: 25,
-    wind: false,
     zoomed: true,
     controls: [
       { key: 'localT', label: 'Local cloud temperature', min: -42, max: -2, step: 1, value: -15, fmt: v => `${v} °C` },
@@ -1137,7 +1135,6 @@ const SCENES = [
     title: 'Stage 3 — Layering',
     duration: 60,
     timeScale: 25,
-    wind: false,
     selectable: true,
     controls: [],
     legend: [
@@ -1228,7 +1225,6 @@ const SCENES = [
     title: 'Stage 4 — Falling Hail',
     duration: 60,
     timeScale: 20,
-    wind: false,
     selectable: true,
     controls: [],
     legend: [
@@ -1706,8 +1702,8 @@ function buildSidePanel() {
 function goTo(i) {
   App.idx = (i + SCENES.length) % SCENES.length;
   const sc = scene();
-  App.showWind = sc.wind;
-  el('showWind').checked = App.showWind;
+  // The wind field setting carries over between stages; the zoomed-in view has no wind field to show.
+  el('showWindLabel').style.display = sc.zoomed ? 'none' : '';
   App.selectedId = null;
   el('timeline').max = sc.duration;
   history.replaceState(null, '', `#slide-${App.idx + 1}`);
