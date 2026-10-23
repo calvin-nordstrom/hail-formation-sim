@@ -832,9 +832,12 @@ function drawHail(ctx, view, sim, opts) {
 }
 
 // Cross-section of a hailstone showing its growth layers.
-function drawCrossSection(ctx, h, cx, cy, R) {
-  const pw = R * 2 + 36, ph = R * 2 + 84;
-  const x0 = cx - pw / 2, y0 = cy - R - 34;
+const crossSectionSize = R => ({ w: R * 2 + 36, h: R * 2 + 84 });
+
+// Positioned by its top-left corner (x0, y0) so callers can keep it fully on the canvas.
+function drawCrossSection(ctx, h, x0, y0, R) {
+  const { w: pw, h: ph } = crossSectionSize(R);
+  const cx = x0 + pw / 2, cy = y0 + R + 34;
   ctx.save();
   roundRect(ctx, x0, y0, pw, ph, 10);
   ctx.fillStyle = 'rgba(6,12,24,0.86)';
@@ -1141,7 +1144,7 @@ const SCENES = [
       drawHail(ctx, view, sim, { trails: true });
       drawAxesAndGround(ctx, view, sim.storm);
       const sel = sim.hail.find(h => h.id === App.selectedId);
-      if (sel) drawCrossSection(ctx, sel, view.ox + 86, view.oy + 66, 62);
+      if (sel) drawCrossSection(ctx, sel, view.ox + 8, 8, 62);
     },
     readouts(sim) {
       const h = sim.hail.find(x => x.id === App.selectedId);
@@ -1199,7 +1202,16 @@ const SCENES = [
       const st = sim.storm, r = sim.rng;
       for (let i = 0; i < 16; i++) {
         const z = st.zForT(-8 - r() * 20) ?? st.top * 0.6;
-        sim.hail.push(makeHail(sim, st.xc + (r() * 2 - 1) * 0.7 * st.R, z, (4 + r() * 30) * 1e-3));
+        // Stones already mid-life: small embryo plus alternating layers from earlier growth.
+        const D = (4 + r() * 30) * 1e-3;
+        const h = makeHail(sim, st.xc + (r() * 2 - 1) * 0.7 * st.R, z, D);
+        h.Dcore = (2 + r() * 2) * 1e-3;
+        let type = r() < 0.5 ? 'dry' : 'wet';
+        for (let d = h.Dcore; d < D * 0.97; d += (1.5 + r() * 3.5) * 1e-3) {
+          h.layers.push({ type, D0: d });
+          type = type === 'dry' ? 'wet' : 'dry';
+        }
+        sim.hail.push(h);
       }
     },
     step(sim, dt, dtp) {
@@ -1253,13 +1265,19 @@ const SCENES = [
         if (!largest || l.D > largest.D) largest = l;
       });
       if (largest) {
-        ctx.fillStyle = '#e6ecf5';
+        // fixed caption at the left of the ground strip, clear of the hail pile under the core
+        const text = `On the ground: ${sim.landed.length} · largest ${fmtMM(largest.D)}`;
         ctx.font = '600 11px system-ui';
-        ctx.textAlign = 'center';
-        ctx.fillText(`largest: ${fmtMM(largest.D)}`, view.sx(largest.x), view.H - 4);
+        ctx.textAlign = 'left';
+        const tw = ctx.measureText(text).width, bx = view.ox + 8, by = view.yGround + Math.max(4, (groundH - 18) / 2);
+        roundRect(ctx, bx, by, tw + 14, 18, 5);
+        ctx.fillStyle = 'rgba(6,12,24,0.8)';
+        ctx.fill();
+        ctx.fillStyle = '#e6ecf5';
+        ctx.fillText(text, bx + 7, by + 13);
       }
       const sel = sim.hail.find(h => h.id === App.selectedId);
-      if (sel) drawCrossSection(ctx, sel, view.ox + 86, view.oy + 66, 62);
+      if (sel) drawCrossSection(ctx, sel, view.ox + 8, 8, 62);
     },
     readouts(sim) {
       const st = sim.storm;
@@ -1437,7 +1455,8 @@ function drawMicro(ctx, W, H, sim) {
   ctx.textAlign = 'center';
   ctx.fillText(`${+(len * 1000).toFixed(1)} mm`, bx + lpx / 2, by - 8);
 
-  drawCrossSection(ctx, s0, W - 90, H - 150, 56);
+  const cs = crossSectionSize(56);
+  drawCrossSection(ctx, s0, W - cs.w - 12, H - cs.h - 12, 56);
 }
 
 // ============================================================================
@@ -1464,6 +1483,7 @@ const App = {
   dirty: false,
   pendingSeek: null,
   scrubbing: false,
+  clock: 0,
   sceneParams: {},
 };
 
@@ -1486,7 +1506,9 @@ function newSim() {
 
 function seek(target) {
   const sc = scene();
-  const nTarget = Math.floor(clamp(target, 0, sc.duration) / DT + 1e-6);
+  // App.clock keeps the sub-step remainder so slow playback (or fast displays) still accumulates whole steps.
+  App.clock = clamp(target, 0, sc.duration);
+  const nTarget = Math.floor(App.clock / DT + 1e-6);
   if (!App.sim || nTarget < App.sim.n) App.sim = newSim();
   const sim = App.sim;
   while (sim.n < nTarget) {
@@ -1665,7 +1687,7 @@ function frame(now) {
   if (App.dirty) { App.dirty = false; rerun(); }
   if (App.pendingSeek !== null) { seek(App.pendingSeek); App.pendingSeek = null; }
   else if (App.playing) {
-    const target = App.sim.t + dtReal * App.speed;
+    const target = App.clock + dtReal * App.speed;
     if (target >= scene().duration) { App.sim = null; seek(0); }
     else seek(target);
   }
