@@ -503,6 +503,10 @@ function sweepDrops(sim, h) {
   }
 }
 
+// Half-height (m) of the zoomed accretion view. It widens more slowly than the stone grows,
+// so the stone visibly grows on screen (from ~7% to ~45% of the half-height).
+const microHalfM = D => Math.max(D, 0.254 * Math.pow(D, 0.6));
+
 function makeEmbryo(sim) {
   const st = sim.storm, r = sim.rng;
   const z = st.zForT(-8 - r() * 14) ?? st.top * 0.6;
@@ -1022,26 +1026,35 @@ const SCENES = [
       sim.splashes = [];
       sim.spawnAcc = 0;
       sim.rot = 0;
-      sim.halfM = 1e-3;
-      sim.Rv = 0.125;
-      sim.env = { T: 0, z: 0, lwc: 0, V: 0 };
+      sim.halfM0 = sim.halfM = microHalfM(sim.stone.D);
+      sim.Rv = sim.stone.D / 2 / sim.halfM;
+      sim.zoom = 1;        // starting view size / current view size
+      sim.dropScale = 1;
+      sim.U = 0.7;         // on-screen airspeed, view half-heights per animation second
+      this.env(sim);
+    },
+    env(sim) {
+      const st = sim.storm, T = sim.params.localT;
+      const z = st.zForT(T) ?? st.top;
+      sim.env = { T, z, lwc: st.lwc(st.xc, z, true), V: termVel(sim.stone.D, z, st) };
+      return sim.env;
     },
     step(sim, dt, dtp) {
       const st = sim.storm, s = sim.stone, rng = sim.rng;
-      const T = sim.params.localT;
-      const z = st.zForT(T) ?? st.top;
-      const lwc = st.lwc(st.xc, z, true);
-      const V = termVel(s.D, z, st);
-      sim.env = { T, z, lwc, V };
+      const { T, z, lwc, V } = this.env(sim);
       growHail(s, st, T, z, lwc, V, dtp);
       s.age += dtp;
-      sim.halfM = Math.max(1e-3, 2.4 * s.D);
+      sim.halfM = microHalfM(s.D);
       sim.Rv = (s.D / 2) / sim.halfM;
+      sim.zoom = sim.halfM0 / sim.halfM;
       sim.rot += dt * 0.5;
 
-      // droplets stream up past the stone (stone's frame of reference)
-      const U = 0.9, R = sim.Rv, R2 = R * R, beta = 0.7, rd = 0.012;
-      sim.spawnAcc += dt * 60 * lwc / 2e-3;
+      // Droplets stream up past the stone (stone's frame of reference). They keep a fixed (enlarged)
+      // physical size, so they shrink on screen as the view widens, and more of them fill the larger view.
+      sim.U = 0.55 + 0.05 * V;
+      sim.dropScale = clamp(Math.sqrt(sim.zoom), 0.35, 1);
+      const U = sim.U, R = sim.Rv, R2 = R * R, beta = 0.7, rd = 0.012 * sim.dropScale;
+      sim.spawnAcc += dt * 60 * lwc / 2e-3 * Math.min(4, Math.pow(1 / sim.zoom, 0.6));
       while (sim.spawnAcc >= 1) { sim.spawnAcc--; sim.drops.push({ x: (rng() * 2 - 1) * 1.9, y: -1.15 }); }
       const kept = [];
       for (const d of sim.drops) {
@@ -1307,9 +1320,12 @@ function drawMicro(ctx, W, H, sim) {
   const toX = x => cx + x * s, toY = y => cy - y * s;
   const R = sim.Rv, Rpx = R * s, s0 = sim.stone;
 
-  // streamlines of the airflow around the stone
-  ctx.strokeStyle = 'rgba(255,255,255,0.07)';
+  // streamlines of the airflow around the stone; dashes drift with the air
+  ctx.save();
+  ctx.strokeStyle = 'rgba(255,255,255,0.11)';
   ctx.lineWidth = 1;
+  ctx.setLineDash([10, 8]);
+  ctx.lineDashOffset = -sim.t * sim.U * s;
   for (let x0 = -1.9; x0 <= 1.9; x0 += 0.16) {
     if (Math.abs(x0) < 0.05) continue;
     let x = x0, y = -1.2;
@@ -1325,12 +1341,14 @@ function drawMicro(ctx, W, H, sim) {
     }
     ctx.stroke();
   }
+  ctx.restore();
 
   // droplets
+  const dropPx = Math.max(1.2, 3.6 * sim.dropScale);
   ctx.fillStyle = DROP_STYLE.supercooled;
   for (const d of sim.drops) {
     ctx.beginPath();
-    ctx.arc(toX(d.x), toY(d.y), 3, 0, TAU);
+    ctx.arc(toX(d.x), toY(d.y), dropPx, 0, TAU);
     ctx.fill();
   }
 
@@ -1369,7 +1387,7 @@ function drawMicro(ctx, W, H, sim) {
     const rr = Rpx * Math.min(1, b.D / s0.D) * (crystal > 0.5 ? 0.9 : 1);
     ctx.fillStyle = 'rgba(250,252,255,0.95)';
     ctx.beginPath();
-    ctx.arc(Math.cos(b.a) * rr, -Math.sin(b.a) * rr, 2.6 * b.s, 0, TAU);
+    ctx.arc(Math.cos(b.a) * rr, -Math.sin(b.a) * rr, Math.max(1, 2.6 * b.s * sim.dropScale), 0, TAU);
     ctx.fill();
   }
   ctx.restore();
