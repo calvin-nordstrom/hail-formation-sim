@@ -4,7 +4,1676 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Hail Formation Simulation</title>
+  <style>
+    :root {
+      --bg: #0b1220;
+      --panel: #111a2b;
+      --panel-2: #172238;
+      --border: #24324e;
+      --text: #e6ecf5;
+      --muted: #97a6bf;
+      --accent: #5ec8ff;
+      --warm: #ffb15e;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; }
+    body {
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--text);
+      font: 14px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    }
+    header {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px 20px;
+      padding: 10px 16px;
+      border-bottom: 1px solid var(--border);
+    }
+    h1 { margin: 0; font-size: 18px; font-weight: 650; letter-spacing: 0.2px; }
+    nav.tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+    .tab {
+      padding: 6px 13px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      background: var(--panel-2);
+      color: var(--muted);
+      font: inherit;
+      cursor: pointer;
+    }
+    .tab:hover { color: var(--text); }
+    .tab.active { background: var(--accent); border-color: var(--accent); color: #06121e; font-weight: 600; }
+
+    main {
+      flex: 1;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 370px;
+      min-height: 0;
+    }
+    #stage { position: relative; min-height: 440px; }
+    #stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+    aside {
+      overflow: auto;
+      padding: 16px 18px;
+      border-left: 1px solid var(--border);
+      background: var(--panel);
+    }
+    aside h2 { margin: 0 0 8px; font-size: 17px; }
+    aside h3 { margin: 18px 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.8px; color: var(--muted); }
+    aside p { margin: 0 0 10px; }
+    details { margin-top: 6px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel-2); }
+    details summary { cursor: pointer; font-weight: 600; color: var(--accent); }
+    details p, details li { color: #c9d4e6; font-size: 13px; }
+    details ul { margin: 6px 0 4px; padding-left: 18px; }
+    code { font-size: 12.5px; color: #ffd9a8; }
+    .legend { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px; font-size: 13px; color: #c9d4e6; }
+    .legend span.sw { display: inline-block; width: 11px; height: 11px; margin-right: 6px; border-radius: 50%; vertical-align: -1px; }
+    table.readouts { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+    table.readouts td { padding: 3px 0; border-bottom: 1px solid #1d2943; }
+    table.readouts td:last-child { text-align: right; color: #fff; }
+    .hint { color: var(--muted); font-size: 12.5px; }
+
+    #controls { border-top: 1px solid var(--border); background: var(--panel); padding: 10px 16px 12px; }
+    .row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; }
+    .row + .row { margin-top: 10px; }
+    button.ctl, select {
+      padding: 6px 12px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--panel-2);
+      color: var(--text);
+      font: inherit;
+      cursor: pointer;
+    }
+    button.ctl:hover { border-color: var(--accent); }
+    #play { min-width: 92px; }
+    .timeline { display: flex; flex: 1; align-items: center; gap: 10px; min-width: 260px; }
+    .timeline input { flex: 1; }
+    #timeLabel { min-width: 150px; color: var(--muted); font-variant-numeric: tabular-nums; }
+    .param { display: grid; grid-template-columns: auto; gap: 2px; min-width: 190px; flex: 1; }
+    .param label { font-size: 12.5px; color: var(--muted); display: flex; justify-content: space-between; gap: 8px; }
+    .param label b { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+    .param.scene label { color: var(--warm); }
+    input[type=range] { accent-color: var(--accent); width: 100%; }
+    .param.scene input[type=range] { accent-color: var(--warm); }
+    .check { color: var(--muted); display: flex; align-items: center; gap: 6px; cursor: pointer; }
+    .note { margin-top: 8px; font-size: 12px; color: var(--muted); }
+    .note a { color: var(--accent); }
+
+    @media (max-width: 960px) {
+      main { grid-template-columns: 1fr; }
+      #stage { height: 62vh; }
+      aside { border-left: 0; border-top: 1px solid var(--border); }
+    }
+  </style>
 </head>
 <body>
+  <header>
+    <h1>How Hail Forms</h1>
+    <nav class="tabs" id="tabs" aria-label="Slides"></nav>
+  </header>
+
+  <main>
+    <div id="stage"><canvas id="canvas" aria-label="Hail formation simulation"></canvas></div>
+    <aside>
+      <h2 id="sceneTitle"></h2>
+      <div id="sceneLay"></div>
+      <details id="sciBox" open>
+        <summary>The science</summary>
+        <div id="sceneSci"></div>
+      </details>
+      <h3>Legend</h3>
+      <div class="legend" id="legend"></div>
+      <h3>Live readouts</h3>
+      <table class="readouts" id="readouts"></table>
+    </aside>
+  </main>
+
+  <section id="controls">
+    <div class="row">
+      <button class="ctl" id="prev" title="Previous slide (←)">◀ Prev</button>
+      <button class="ctl" id="play" title="Play / pause (space)">❚❚ Pause</button>
+      <button class="ctl" id="next" title="Next slide (→)">Next ▶</button>
+      <div class="timeline">
+        <input type="range" id="timeline" min="0" max="1" step="0.01" value="0" aria-label="Animation position">
+        <span id="timeLabel"></span>
+      </div>
+      <select id="speed" aria-label="Playback speed">
+        <option value="0.5">0.5×</option>
+        <option value="1" selected>1×</option>
+        <option value="2">2×</option>
+        <option value="4">4×</option>
+      </select>
+      <button class="ctl" id="reset" title="Restore default storm settings">Reset settings</button>
+      <label class="check"><input type="checkbox" id="showWind"> Show wind field</label>
+    </div>
+    <div class="row" id="params"></div>
+    <div class="note">
+      Simplified 2-D model for illustration. Particles are not drawn to scale. Changing a setting re-runs the
+      simulation from the start up to the current position.
+      <a href="https://github.com/calvin-nordstrom/hail-formation-sim">Source on GitHub</a>
+    </div>
+  </section>
+
+<script>
+'use strict';
+
+// ============================================================================
+// Utilities
+// ============================================================================
+
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
+const TAU = Math.PI * 2;
+
+// Abramowitz & Stegun 7.1.26
+function erf(x) {
+  const s = x < 0 ? -1 : 1;
+  x = Math.abs(x);
+  const t = 1 / (1 + 0.3275911 * x);
+  const y = 1 - (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * Math.exp(-x * x);
+  return s * y;
+}
+
+function fmtClock(sec) {
+  sec = Math.max(0, Math.round(sec));
+  return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
+}
+const fmtMM = D => `${(D * 1000).toFixed(D < 0.01 ? 1 : 0)} mm`;
+const fmtKM = z => `${(z / 1000).toFixed(1)} km`;
+const fmtSpeed = v => `${v.toFixed(1)} m/s (${Math.round(v * 2.237)} mph)`;
+const fmtT = T => `${T.toFixed(0)} °C`;
+
+// ============================================================================
+// Physics
+// ============================================================================
+
+const PHYS = {
+  g: 9.81,         // m/s^2
+  rhoIce: 900,     // kg/m^3, bulk hail density
+  Cd: 0.6,         // drag coefficient of a hailstone
+  Lf: 3.34e5,      // J/kg, latent heat of fusion
+  Ls: 2.83e6,      // J/kg, latent heat of sublimation
+  cw: 4180,        // J/(kg K), specific heat of water
+  ka: 0.024,       // W/(m K), thermal conductivity of air
+  Dv: 2.2e-5,      // m^2/s, diffusivity of water vapor
+  E: 0.8,          // collection efficiency of hail for cloud droplets
+  Rv: 461.5,       // J/(kg K), gas constant of water vapor
+};
+
+const esWater = T => 611.2 * Math.exp(17.62 * T / (243.12 + T));   // Pa, Magnus
+const esIce = T => 611.2 * Math.exp(22.46 * T / (272.62 + T));     // Pa, Magnus over ice
+const vaporDensity = (e, T) => e / (PHYS.Rv * (T + 273.15));
+function dewPoint(T, RH) {
+  const g = Math.log(RH / 100) + 17.62 * T / (243.12 + T);
+  return 243.12 * g / (17.62 - g);
+}
+
+// Fixed turbulent eddy modes: [horizontal wavelength m, vertical wavelength m, period s, phase].
+const TURB_MODES = [
+  [3200, 2800, 520, 0.3],
+  [2100, 2400, 380, 1.7],
+  [4600, 3600, 760, 4.1],
+  [1700, 1900, 300, 2.6],
+].map(([lx, lz, period, ph], i) => {
+  const k = TAU / lx, m = TAU / lz;
+  return { k, m, w: TAU / period, p: ph, q: ph * 1.7 + i, a: 0.55 / Math.hypot(k, m) };
+});
+
+// The storm environment: temperature profile, airflow and cloud water.
+// Airflow comes from a stream function, so it is divergence-free (mass-conserving in 2-D).
+class Storm {
+  constructor(params) {
+    this.width = 24000;   // m
+    this.height = 14000;  // m
+    this.top = 12000;     // m, equilibrium level / anvil
+    this.xc = 12000;      // m, updraft axis
+    this.R = 2500;        // m, updraft core radius
+    this.version = 0;
+    this.set(params);
+  }
+
+  set(p) {
+    this.p = { ...p };
+    this.W = p.updraft;
+    this.Tsfc = p.temp;
+    this.Td = dewPoint(p.temp, p.humidity);
+    this.cloudBase = clamp(125 * (this.Tsfc - this.Td), 300, 4000);   // LCL estimate
+    this.Tbase = this.Tsfc - 9.8e-3 * this.cloudBase;
+    this.lwcMax = clamp(0.11 * this.Td, 0.3, 3.5) * 1e-3;             // kg/m^3, peak before entrainment
+    this.turb = p.turbulence;
+    this.version++;
+  }
+
+  // Temperature (°C): dry adiabatic below cloud base, moist adiabatic above.
+  T(z) {
+    z = clamp(z, 0, this.top);
+    return z < this.cloudBase ? this.Tsfc - 9.8e-3 * z : this.Tbase - 6.0e-3 * (z - this.cloudBase);
+  }
+
+  // Height of an isotherm, or null when it lies above the cloud top.
+  zForT(T) {
+    if (T >= this.Tsfc) return 0;
+    const z = T >= this.Tbase ? (this.Tsfc - T) / 9.8e-3 : this.cloudBase + (this.Tbase - T) / 6.0e-3;
+    return z > this.top ? null : z;
+  }
+
+  rhoAir(z) { return 1.225 * Math.exp(-Math.max(0, z) / 8500); }
+  nu(z) { return 1.46e-5 * 1.225 / this.rhoAir(z); }
+
+  // Air velocity at (x, z) and physical time t. Writes {u, w} into out.
+  vel(x, z, t, out) {
+    const R = this.R, H = this.top;
+    const dx = x - this.xc, s = dx / R, q = dx / (3 * R);
+    const eq = Math.exp(-q * q), erfS = erf(s);
+    // psi_u = W * A(x) * G(z);  A = R*(sqrt(pi)/2)*erf(s)*exp(-q^2),  G = sin(pi z / H)
+    const A = R * 0.886227 * erfS * eq;
+    const dA = eq * (Math.exp(-s * s) - 0.590818 * q * erfS);
+    let G = 0, dG = 0;
+    if (z > 0 && z < H) {
+      const ph = Math.PI * z / H;
+      G = Math.sin(ph);
+      dG = Math.PI / H * Math.cos(ph);
+    }
+    let u = -this.W * A * dG;
+    let w = this.W * dA * G;
+
+    // Turbulent eddies confined to the cloud: psi_t = S * ex(x) * ez(z)^2 * sum(modes)
+    const zb = this.cloudBase;
+    if (this.turb > 0 && z > zb && z < H) {
+      const L = 1.8 * R;
+      const ex = Math.exp(-(dx / L) * (dx / L));
+      const zeta = Math.PI * (z - zb) / (H - zb);
+      const ez = Math.sin(zeta);
+      const E = ex * ez * ez;
+      const dEdx = -2 * dx / (L * L) * E;
+      const dEdz = ex * 2 * ez * Math.cos(zeta) * Math.PI / (H - zb);
+      let sum = 0, dSx = 0, dSz = 0;
+      for (const md of TURB_MODES) {
+        const ax = md.k * x + md.w * t + md.p, az = md.m * z + md.q;
+        const sx = Math.sin(ax), cx = Math.cos(ax), sz = Math.sin(az), cz = Math.cos(az);
+        sum += md.a * sx * sz;
+        dSx += md.a * md.k * cx * sz;
+        dSz += md.a * md.m * sx * cz;
+      }
+      u -= this.turb * (dEdz * sum + E * dSz);
+      w += this.turb * (dEdx * sum + E * dSx);
+    }
+    out.u = u;
+    out.w = w;
+    return out;
+  }
+
+  // Supercooled / cloud liquid water content (kg/m^3). Entrainment makes it patchy unless smooth is set.
+  lwc(x, z, smooth) {
+    if (z < this.cloudBase || z > this.top) return 0;
+    const T = this.T(z);
+    if (T <= -40) return 0;
+    const dx = (x - this.xc) / (1.6 * this.R);
+    const rise = Math.min(1, (z - this.cloudBase) / 1500);
+    const glaciation = clamp((T + 40) / 20, 0, 1);
+    const patch = smooth ? 0.7 : 0.15 + 0.85 * (0.5 + 0.5 * Math.sin(x / 1500 + 0.7) * Math.sin(z / 1000 + 1.3));
+    return this.lwcMax * rise * glaciation * patch * Math.exp(-dx * dx);
+  }
+
+  // Largest stone the peak updraft (at mid-cloud on the axis) can hold aloft.
+  maxSupportedD() {
+    return 3 * PHYS.Cd * this.rhoAir(this.top / 2) * this.W * this.W / (4 * PHYS.g * PHYS.rhoIce);
+  }
+}
+
+// Terminal fall speed of a hailstone of diameter D (m) at height z.
+function termVel(D, z, storm) {
+  return Math.sqrt(4 * PHYS.g * D * PHYS.rhoIce / (3 * PHYS.Cd * storm.rhoAir(z)));
+}
+
+// Surface heat budget of a growing hailstone (per unit area, surface held at 0 °C).
+// Wet growth when the latent heat released exceeds what conduction + sublimation can remove.
+function surfaceHeat(D, V, z, T, lwc, storm) {
+  const Re = V * D / storm.nu(z);
+  const Nu = 2 + 0.6 * Math.sqrt(Re) * 0.89;           // Pr^(1/3) ≈ 0.89
+  const hc = PHYS.ka * Nu / D;
+  const hm = PHYS.Dv * (1.225 / storm.rhoAir(z)) * Nu / D;   // diffusivity rises as pressure falls
+  const F = PHYS.E * lwc * V;                          // accreted mass flux, kg/(m^2 s)
+  const dT = -T;
+  const removal = hc * dT + PHYS.Ls * hm * Math.max(0, vaporDensity(esWater(0), 0) - vaporDensity(esIce(T), T));
+  const release = F * (PHYS.Lf + PHYS.cw * dT);
+  return { F, hc, removal, release };
+}
+
+function makeHail(sim, x, z, D) {
+  return {
+    id: sim.nextId++, x, z, D, Dcore: D,
+    layers: [], regime: 'none', pending: null, pendingT: 0, pendingD: 0, idleT: 0,
+    trail: [], age: 0, maxZ: z, collected: 0, V: 0, w: 0, T: 0, landed: false,
+  };
+}
+
+// Track growth regime and lay down a new layer when it changes (with hysteresis),
+// or when growth resumes after the stone spent a while outside the growth region.
+function setRegime(h, r, dtp) {
+  h.regime = r;
+  if (r !== 'wet' && r !== 'dry') {
+    h.pending = null;
+    h.idleT += dtp;
+    return;
+  }
+  const cur = h.layers.length ? h.layers[h.layers.length - 1].type : null;
+  if (cur === null || (h.idleT > 60 && h.D > h.layers[h.layers.length - 1].D0 * 1.05)) {
+    h.layers.push({ type: r, D0: h.D });
+    h.pending = null;
+  } else if (cur !== r) {
+    if (h.pending !== r) { h.pending = r; h.pendingT = 0; h.pendingD = h.D; }
+    h.pendingT += dtp;
+    if (h.pendingT >= 20) { h.layers.push({ type: r, D0: h.pendingD }); h.pending = null; }
+  } else {
+    h.pending = null;
+  }
+  h.idleT = 0;
+}
+
+// Grow (or melt) a hailstone for one step of physical time dtp.
+function growHail(h, storm, T, z, lwc, V, dtp) {
+  if (T > 0) {
+    const Re = V * h.D / storm.nu(z);
+    const hc = PHYS.ka * (2 + 0.6 * Math.sqrt(Re) * 0.89) / h.D;
+    h.D -= 2 * hc * T / (PHYS.rhoIce * PHYS.Lf) * dtp;
+    h.heat = null;
+    setRegime(h, 'melt', dtp);
+  } else if (lwc > 0.1 * storm.lwcMax) {
+    const s = surfaceHeat(h.D, V, z, T, lwc, storm);
+    h.D += s.F / (2 * PHYS.rhoIce) * dtp;
+    h.heat = s;
+    setRegime(h, s.release > s.removal ? 'wet' : 'dry', dtp);
+  } else {
+    h.heat = null;
+    setRegime(h, 'none', dtp);
+  }
+}
+
+// Move a hailstone with the air minus its fall speed, then grow it.
+function updateHail(sim, h, dtp) {
+  const st = sim.storm, v = sim.vtmp;
+  st.vel(h.x, h.z, sim.tp, v);
+  h.T = st.T(h.z);
+  h.V = termVel(h.D, h.z, st);
+  h.w = v.w;
+  h.x += v.u * dtp;
+  h.z += (v.w - h.V) * dtp;
+  h.age += dtp;
+  h.maxZ = Math.max(h.maxZ, h.z);
+  growHail(h, st, h.T, h.z, st.lwc(h.x, h.z), h.V, dtp);
+  if (sim.n % 8 === 0) {
+    h.trail.push(h.x, h.z, h.regime === 'wet' ? 2 : h.regime === 'dry' ? 1 : 0);
+    if (h.trail.length > 900) h.trail.splice(0, 3);
+  }
+}
+
+// ============================================================================
+// Droplets (air parcels / cloud water)
+// ============================================================================
+
+function nucleationRate(T) { return T < -12 ? 3e-4 * (-12 - T) : 0; }   // per second
+
+function advectDrops(sim, dtp, nucleate) {
+  const st = sim.storm, v = sim.vtmp, rng = sim.rng;
+  const kept = [];
+  for (const d of sim.drops) {
+    if (d.dead) continue;
+    st.vel(d.x, d.z, sim.tp, v);
+    d.x += v.u * dtp;
+    d.z += v.w * dtp;
+    d.age += dtp;
+    const T = st.T(d.z);
+    if (d.state === 'ice') {
+      if (T > 0) d.state = 'liquid';
+    } else if (d.z < st.cloudBase) {
+      d.state = 'vapor';
+    } else if (T >= 0) {
+      d.state = 'liquid';
+    } else {
+      d.state = 'supercooled';
+      if (T <= -38 || (nucleate && rng() < nucleationRate(T) * dtp)) d.state = 'ice';
+    }
+    if (d.trail && sim.n % 10 === 0) d.trail.push(d.x, d.z);
+    if (d.x < 0 || d.x > st.width || d.z < 0 || d.z > st.height || d.age > d.life) continue;
+    kept.push(d);
+  }
+  sim.drops = kept;
+}
+
+// Warm moist air entering the storm near the ground.
+function spawnInflow(sim, tracked) {
+  const st = sim.storm, r = sim.rng;
+  const g = (r() + r() + r() - 1.5) / 1.5;
+  const d = {
+    x: st.xc + g * (tracked ? 0.35 : 1.9) * st.R,
+    z: 40 + r() * 700,
+    state: 'vapor', age: 0, life: 1100, tracked,
+  };
+  if (tracked) {
+    d.trail = [];
+    d.side = (sim.trackCount = (sim.trackCount || 0) + 1) % 2;
+  }
+  sim.drops.push(d);
+}
+
+// Cloud water sampled in proportion to the local liquid water content.
+function spawnCloudWater(sim, n, prewarm) {
+  const st = sim.storm, r = sim.rng;
+  for (let i = 0; i < n; i++) {
+    for (let tries = 0; tries < 30; tries++) {
+      const x = st.xc + (r() * 2 - 1) * 2.8 * st.R;
+      const z = st.cloudBase + r() * (st.top - st.cloudBase);
+      if (r() * st.lwcMax < st.lwc(x, z)) {
+        const life = 120 + r() * 120;
+        sim.drops.push({ x, z, state: st.T(z) < 0 ? 'supercooled' : 'liquid', age: prewarm ? r() * life : 0, life });
+        break;
+      }
+    }
+  }
+}
+
+function cloudWaterStep(sim, dtp, target) {
+  sim.cwAcc += target / 180 * dtp;
+  const n = Math.floor(sim.cwAcc);
+  sim.cwAcc -= n;
+  spawnCloudWater(sim, n, false);
+  advectDrops(sim, dtp, false);
+}
+
+// Remove droplets a growing stone sweeps up (visual stand-in for the continuous accretion).
+function sweepDrops(sim, h) {
+  if (h.regime !== 'wet' && h.regime !== 'dry') return;
+  const rc = 150 + h.D * 1000 * 15, rc2 = rc * rc;
+  for (const d of sim.drops) {
+    if (d.dead) continue;
+    const dx = d.x - h.x, dz = d.z - h.z;
+    if (dx * dx + dz * dz < rc2) { d.dead = true; h.collected++; }
+  }
+}
+
+function makeEmbryo(sim) {
+  const st = sim.storm, r = sim.rng;
+  const z = st.zForT(-8 - r() * 14) ?? st.top * 0.6;
+  return makeHail(sim, st.xc + (r() * 2 - 1) * 0.6 * st.R, z, (2 + r() * 2.5) * 1e-3);
+}
+
+// ============================================================================
+// Drawing helpers
+// ============================================================================
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+function makeStormView(W, H, st) {
+  const padL = 46, padR = 86, padT = 12, padB = 28;
+  const pw = W - padL - padR, ph = H - padT - padB;
+  const k = Math.min(pw / st.width, ph / st.height);
+  const ox = padL + (pw - k * st.width) / 2, oy = padT + (ph - k * st.height) / 2;
+  return {
+    k, ox, oy, W, H,
+    x1: ox + st.width * k, yGround: oy + st.height * k,
+    sx: x => ox + x * k,
+    sy: z => oy + (st.height - z) * k,
+    wx: px => (px - ox) / k,
+    wz: py => st.height - (py - oy) / k,
+  };
+}
+
+const cloudCache = { key: '', canvas: null };
+
+function cloudLayer(view, st, dpr) {
+  const key = [st.version, view.W, view.H, dpr].join();
+  if (cloudCache.key === key) return cloudCache.canvas;
+  const c = cloudCache.canvas || document.createElement('canvas');
+  c.width = Math.round(view.W * dpr);
+  c.height = Math.round(view.H * dpr);
+  const g = c.getContext('2d');
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.clearRect(0, 0, view.W, view.H);
+  const r = mulberry32(7);
+  const puffs = [];
+  const depth = st.top - st.cloudBase;
+  for (let i = 0; i < 130; i++) {
+    const z = st.cloudBase + 300 + r() * (depth - 300);
+    const spread = 0.75 + 0.5 * (z - st.cloudBase) / depth;
+    puffs.push([st.xc + (r() + r() - 1) * 1.55 * st.R * spread, z, 700 + r() * 900, 1]);
+  }
+  for (let i = 0; i < 100; i++) {
+    const f = r() * 2 - 1;
+    puffs.push([st.xc + f * 4.4 * st.R, st.top - 1400 + r() * 1500 - Math.abs(f) * 500, 600 + r() * 700, 0.5]);
+  }
+  for (let i = 0; i < 12; i++) puffs.push([st.xc + (r() * 2 - 1) * 0.6 * st.R, st.top + r() * 700, 500 + r() * 500, 1]);
+
+  g.save();
+  g.beginPath();
+  g.rect(0, 0, view.W, view.sy(st.cloudBase));
+  g.clip();
+  for (const [x, z, rad, squash] of puffs) {
+    const pr = rad * view.k;
+    g.save();
+    g.translate(view.sx(x), view.sy(z));
+    g.scale(1, squash);
+    const grd = g.createRadialGradient(0, 0, 0, 0, 0, pr);
+    grd.addColorStop(0, 'rgba(205,214,228,0.20)');
+    grd.addColorStop(1, 'rgba(205,214,228,0)');
+    g.fillStyle = grd;
+    g.beginPath();
+    g.arc(0, 0, pr, 0, TAU);
+    g.fill();
+    g.restore();
+  }
+  // darker, flat cloud base
+  const yb = view.sy(st.cloudBase);
+  const shade = g.createLinearGradient(0, yb, 0, yb - 1600 * view.k);
+  shade.addColorStop(0, 'rgba(20,28,44,0.55)');
+  shade.addColorStop(1, 'rgba(20,28,44,0)');
+  g.fillStyle = shade;
+  g.fillRect(view.sx(st.xc - 2.6 * st.R), yb - 1600 * view.k, 5.2 * st.R * view.k, 1600 * view.k);
+  g.restore();
+  cloudCache.key = key;
+  cloudCache.canvas = c;
+  return c;
+}
+
+function drawStormBackground(ctx, view, st, dpr) {
+  const sky = ctx.createLinearGradient(0, 0, 0, view.yGround);
+  sky.addColorStop(0, '#08111f');
+  sky.addColorStop(1, '#2a3a52');
+  ctx.fillStyle = sky;
+  ctx.fillRect(0, 0, view.W, view.H);
+
+  // hail growth zone
+  const zA = st.zForT(-10), zB = st.zForT(-30) ?? st.top;
+  if (zA !== null) {
+    ctx.fillStyle = 'rgba(94,200,255,0.06)';
+    ctx.fillRect(view.ox, view.sy(zB), view.x1 - view.ox, view.sy(zA) - view.sy(zB));
+    ctx.fillStyle = 'rgba(94,200,255,0.55)';
+    ctx.font = '11px system-ui';
+    ctx.textAlign = 'left';
+    ctx.fillText('hail growth zone (−10 to −30 °C)', view.ox + 6, view.sy(zB) + 13);
+  }
+  ctx.drawImage(cloudLayer(view, st, dpr), 0, 0, view.W, view.H);
+}
+
+function drawIsotherms(ctx, view, st) {
+  ctx.save();
+  ctx.font = '11px system-ui';
+  ctx.textAlign = 'left';
+  const lines = [
+    { z: st.cloudBase, label: 'cloud base', color: 'rgba(200,210,225,0.55)' },
+    { z: st.zForT(0), label: '0 °C', color: 'rgba(255,177,94,0.85)' },
+    { z: st.zForT(-20), label: '−20 °C', color: 'rgba(140,210,255,0.6)' },
+    { z: st.zForT(-40), label: '−40 °C', color: 'rgba(200,170,255,0.7)' },
+  ];
+  for (const ln of lines) {
+    if (ln.z === null) continue;
+    const y = view.sy(ln.z);
+    ctx.strokeStyle = ln.color;
+    ctx.setLineDash([5, 5]);
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(view.ox, y);
+    ctx.lineTo(view.x1, y);
+    ctx.stroke();
+    ctx.fillStyle = ln.color;
+    ctx.fillText(ln.label, view.x1 + 6, y + 4);
+    ctx.fillStyle = 'rgba(151,166,191,0.8)';
+    ctx.fillText(fmtKM(ln.z), view.x1 + 6, y + 16);
+  }
+  ctx.restore();
+}
+
+function drawAxesAndGround(ctx, view, st) {
+  ctx.fillStyle = '#1b2619';
+  ctx.fillRect(0, view.yGround, view.W, view.H - view.yGround);
+  ctx.strokeStyle = '#3c5236';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(0, view.yGround);
+  ctx.lineTo(view.W, view.yGround);
+  ctx.stroke();
+
+  ctx.fillStyle = '#8796ad';
+  ctx.strokeStyle = 'rgba(135,150,173,0.5)';
+  ctx.font = '11px system-ui';
+  ctx.textAlign = 'right';
+  ctx.lineWidth = 1;
+  for (let km = 0; km <= st.height / 1000; km += 2) {
+    const y = view.sy(km * 1000);
+    ctx.beginPath();
+    ctx.moveTo(view.ox - 4, y);
+    ctx.lineTo(view.ox, y);
+    ctx.stroke();
+    ctx.fillText(`${km}`, view.ox - 7, y + 4);
+  }
+  ctx.save();
+  ctx.translate(13, view.sy(st.height / 2));
+  ctx.rotate(-Math.PI / 2);
+  ctx.textAlign = 'center';
+  ctx.fillText('altitude (km)', 0, 0);
+  ctx.restore();
+}
+
+function drawWindField(ctx, view, sim) {
+  const st = sim.storm, v = { u: 0, w: 0 };
+  ctx.save();
+  ctx.lineWidth = 1.2;
+  for (let z = 600; z < st.height; z += 1100) {
+    for (let x = 750; x < st.width; x += 1500) {
+      st.vel(x, z, sim.tp, v);
+      const sp = Math.hypot(v.u, v.w);
+      if (sp < 0.5) continue;
+      const len = Math.min(26, 3 + sp * 0.7);
+      const px = view.sx(x), py = view.sy(z);
+      const ux = v.u / sp, uy = -v.w / sp;
+      const a = clamp(0.25 + sp / 40, 0.25, 0.9);
+      ctx.strokeStyle = v.w >= 0 ? `rgba(255,170,90,${a})` : `rgba(120,180,255,${a})`;
+      const x2 = px + ux * len, y2 = py + uy * len;
+      ctx.beginPath();
+      ctx.moveTo(px, py);
+      ctx.lineTo(x2, y2);
+      ctx.moveTo(x2, y2);
+      ctx.lineTo(x2 - ux * 5 - uy * 3, y2 - uy * 5 + ux * 3);
+      ctx.moveTo(x2, y2);
+      ctx.lineTo(x2 - ux * 5 + uy * 3, y2 - uy * 5 - ux * 3);
+      ctx.stroke();
+    }
+  }
+  ctx.restore();
+}
+
+const DROP_STYLE = {
+  vapor: 'rgba(235,240,250,0.22)',
+  liquid: '#4da3ff',
+  supercooled: '#7ff0ff',
+  ice: '#ffffff',
+};
+
+function drawIceCrystal(ctx, x, y, r, color) {
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let i = 0; i < 3; i++) {
+    const a = i * Math.PI / 3;
+    ctx.moveTo(x - Math.cos(a) * r, y - Math.sin(a) * r);
+    ctx.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r);
+  }
+  ctx.stroke();
+}
+
+function drawDrops(ctx, view, sim) {
+  for (const d of sim.drops) {
+    const px = view.sx(d.x), py = view.sy(d.z);
+    let alpha = 1;
+    if (!d.tracked && d.life < 500) alpha = Math.min(1, d.age / 20, (d.life - d.age) / 20);
+    ctx.globalAlpha = alpha;
+    if (d.state === 'ice') {
+      drawIceCrystal(ctx, px, py, 2.6, DROP_STYLE.ice);
+    } else {
+      ctx.fillStyle = DROP_STYLE[d.state];
+      ctx.beginPath();
+      ctx.arc(px, py, d.state === 'vapor' ? 2.2 : 1.7, 0, TAU);
+      ctx.fill();
+    }
+  }
+  ctx.globalAlpha = 1;
+}
+
+const STATE_WORD = { vapor: 'moist air', liquid: 'cloud droplets', supercooled: 'supercooled', ice: 'ice' };
+
+function drawTrackedParcels(ctx, view, sim) {
+  ctx.font = '600 11px system-ui';
+  ctx.textAlign = 'left';
+  for (const d of sim.drops) {
+    if (!d.tracked) continue;
+    ctx.strokeStyle = 'rgba(255,214,120,0.45)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    for (let i = 0; i < d.trail.length; i += 2) {
+      const px = view.sx(d.trail[i]), py = view.sy(d.trail[i + 1]);
+      i ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
+    }
+    ctx.lineTo(view.sx(d.x), view.sy(d.z));
+    ctx.stroke();
+    const px = view.sx(d.x), py = view.sy(d.z);
+    ctx.fillStyle = '#ffd678';
+    ctx.beginPath();
+    ctx.arc(px, py, 4.5, 0, TAU);
+    ctx.fill();
+    ctx.strokeStyle = '#08111f';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    const label = `${fmtT(sim.storm.T(d.z))} · ${STATE_WORD[d.state]}`;
+    const tw = ctx.measureText(label).width;
+    // alternate sides so labels of neighboring parcels don't overlap
+    const lx = d.side ? px - tw - 16 : px + 8;
+    ctx.fillStyle = 'rgba(8,17,31,0.75)';
+    ctx.fillRect(lx, py - 9, tw + 8, 16);
+    ctx.fillStyle = '#ffd678';
+    ctx.fillText(label, lx + 4, py + 3);
+  }
+}
+
+const hailRadiusPx = D => 2.2 + D * 1000 * 0.3;
+
+function hailFill(ctx, h, px, py, r) {
+  const outer = h.layers.length ? h.layers[h.layers.length - 1].type : 'dry';
+  const g = ctx.createRadialGradient(px - r * 0.35, py - r * 0.35, r * 0.1, px, py, r);
+  if (outer === 'wet') {
+    g.addColorStop(0, 'rgba(235,248,255,0.95)');
+    g.addColorStop(1, 'rgba(130,185,240,0.85)');
+  } else {
+    g.addColorStop(0, '#ffffff');
+    g.addColorStop(1, '#b9c6d8');
+  }
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.arc(px, py, r, 0, TAU);
+  ctx.fill();
+}
+
+function drawHail(ctx, view, sim, opts) {
+  const trails = opts.trails;
+  if (trails) {
+    ctx.lineWidth = 1.6;
+    for (const h of sim.hail) {
+      const tr = h.trail;
+      for (let i = 3; i < tr.length; i += 3) {
+        const type = tr[i + 2];
+        ctx.strokeStyle = type === 2 ? 'rgba(120,185,255,0.75)' : type === 1 ? 'rgba(240,245,255,0.6)' : 'rgba(150,160,180,0.25)';
+        ctx.globalAlpha = h.id === App.selectedId ? 1 : 0.45;
+        ctx.beginPath();
+        ctx.moveTo(view.sx(tr[i - 3]), view.sy(tr[i - 2]));
+        ctx.lineTo(view.sx(tr[i]), view.sy(tr[i + 1]));
+        ctx.stroke();
+      }
+    }
+    ctx.globalAlpha = 1;
+  }
+  for (const h of sim.hail) {
+    const px = view.sx(h.x), py = view.sy(h.z), r = hailRadiusPx(h.D);
+    const net = h.w - h.V;
+    if (opts.streaks && net < -4) {
+      ctx.strokeStyle = 'rgba(220,235,255,0.35)';
+      ctx.lineWidth = Math.max(1, r * 0.8);
+      ctx.beginPath();
+      ctx.moveTo(px, py);
+      ctx.lineTo(px, py - Math.min(40, -net * 1.1));
+      ctx.stroke();
+    }
+    hailFill(ctx, h, px, py, r);
+    if (h.id === App.selectedId) {
+      ctx.strokeStyle = '#ffb15e';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(px, py, r + 4, 0, TAU);
+      ctx.stroke();
+    }
+  }
+}
+
+// Cross-section of a hailstone showing its growth layers.
+function drawCrossSection(ctx, h, cx, cy, R) {
+  const pw = R * 2 + 36, ph = R * 2 + 84;
+  const x0 = cx - pw / 2, y0 = cy - R - 34;
+  ctx.save();
+  roundRect(ctx, x0, y0, pw, ph, 10);
+  ctx.fillStyle = 'rgba(6,12,24,0.86)';
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(120,150,200,0.35)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  ctx.fillStyle = '#cfe0f5';
+  ctx.font = '600 12px system-ui';
+  ctx.textAlign = 'center';
+  ctx.fillText('Cross-section', cx, y0 + 19);
+
+  const D = Math.max(h.D, 1e-5);
+  const layers = h.layers.filter(l => l.D0 < D);
+  let outer = D;
+  for (let i = layers.length - 1; i >= 0; i--) {
+    const L = layers[i];
+    const ro = R * outer / D, ri = R * L.D0 / D;
+    ctx.beginPath();
+    ctx.arc(cx, cy, ro, 0, TAU);
+    ctx.arc(cx, cy, ri, 0, TAU, true);
+    if (L.type === 'wet') {
+      ctx.fillStyle = 'rgba(140,195,245,0.42)';
+      ctx.fill();
+    } else {
+      ctx.fillStyle = '#e8eef7';
+      ctx.fill();
+      // trapped air bubbles in opaque (rime) ice
+      const rr = mulberry32(i * 977 + 13);
+      const n = Math.min(80, Math.round((ro * ro - ri * ri) / 30));
+      ctx.fillStyle = 'rgba(140,155,180,0.55)';
+      for (let j = 0; j < n; j++) {
+        const a = rr() * TAU, rad = ri + (ro - ri) * (0.15 + 0.7 * rr());
+        ctx.fillRect(cx + Math.cos(a) * rad, cy + Math.sin(a) * rad, 1.2, 1.2);
+      }
+    }
+    ctx.strokeStyle = 'rgba(50,75,110,0.7)';
+    ctx.lineWidth = 0.8;
+    ctx.beginPath();
+    ctx.arc(cx, cy, ro, 0, TAU);
+    ctx.stroke();
+    outer = L.D0;
+  }
+  ctx.beginPath();
+  ctx.arc(cx, cy, Math.max(2, R * Math.min(h.Dcore, D) / D), 0, TAU);
+  ctx.fillStyle = '#cbbfa8';
+  ctx.fill();
+
+  ctx.font = '12px system-ui';
+  ctx.fillStyle = '#e6ecf5';
+  ctx.fillText(`${fmtMM(h.D)} · ${layers.length} layer${layers.length === 1 ? '' : 's'}`, cx, cy + R + 20);
+  ctx.font = '11px system-ui';
+  const ly = cy + R + 38;
+  ctx.textAlign = 'left';
+  ctx.fillStyle = '#e8eef7';
+  ctx.fillRect(x0 + 12, ly - 8, 9, 9);
+  ctx.fillStyle = '#97a6bf';
+  ctx.fillText('opaque', x0 + 25, ly);
+  ctx.fillStyle = 'rgba(110,170,235,0.7)';
+  ctx.fillRect(cx + 6, ly - 8, 9, 9);
+  ctx.fillStyle = '#97a6bf';
+  ctx.fillText('clear', cx + 19, ly);
+  ctx.restore();
+}
+
+// ============================================================================
+// Scenes
+// ============================================================================
+
+const SCENE_COMMON_READOUTS = sim => {
+  const st = sim.storm;
+  return [
+    ['Cloud base', fmtKM(st.cloudBase)],
+    ['Freezing level (0 °C)', st.zForT(0) === null ? '—' : fmtKM(st.zForT(0))],
+  ];
+};
+
+const SCENES = [
+  {
+    id: 'lifting',
+    tab: '1 · Lifting',
+    title: 'Stage 1 — Lifting',
+    duration: 45,
+    timeScale: 20,      // physical seconds per animation second
+    wind: true,
+    controls: [],
+    legend: [
+      ['rgba(235,240,250,0.5)', 'Warm, moist air'],
+      ['#4da3ff', 'Cloud droplet'],
+      ['#7ff0ff', 'Supercooled droplet'],
+      ['#ffffff', 'Ice crystal'],
+      ['#ffd678', 'Tracked air parcel'],
+    ],
+    lay: `<p>Thunderstorms feed on warm, humid air near the ground. That air is warmer and lighter than its
+      surroundings, so it rises in a strong current called the <b>updraft</b>.</p>
+      <p>As it climbs, it expands and cools. At the <b>cloud base</b> it has cooled to its dew point, and its water
+      vapor condenses into countless tiny cloud droplets. Follow the yellow parcels to see the temperature drop.</p>
+      <p>Above the freezing level, most droplets stay liquid even though they are colder than 0 °C. These
+      <b>supercooled</b> droplets are the raw material for hail.</p>`,
+    sci: `<ul>
+      <li>Below cloud base, rising air cools at the dry adiabatic lapse rate (9.8 °C/km). Above it, latent heat from
+      condensation cuts the cooling to a moist rate of about 6 °C/km.</li>
+      <li>Cloud base is the lifting condensation level, estimated as <code>LCL ≈ 125 m × (T − T<sub>d</sub>)</code>.</li>
+      <li>The updraft comes from a stream function, so the flow conserves mass: low-level inflow converges into the
+      core and diverges into the anvil.</li>
+      <li>Cloud droplets (10–50 µm) fall at only a few cm/s, so they act as tracers of the airflow.</li>
+      <li>Some droplets freeze on ice-nucleating particles below about −12 °C. The rest stay liquid until
+      homogeneous freezing near −38 °C.</li></ul>`,
+    init(sim) {
+      sim.drops = [];
+      sim.spawnAcc = 0;
+      sim.trackAcc = 3.5;
+    },
+    step(sim, dt, dtp) {
+      sim.spawnAcc += dt * 11;
+      while (sim.spawnAcc >= 1) { sim.spawnAcc--; spawnInflow(sim, false); }
+      sim.trackAcc += dt;
+      if (sim.trackAcc >= 7) { sim.trackAcc = 0; spawnInflow(sim, true); }
+      advectDrops(sim, dtp, true);
+    },
+    draw(ctx, view, sim, dpr) {
+      drawStormBackground(ctx, view, sim.storm, dpr);
+      if (App.showWind) drawWindField(ctx, view, sim);
+      drawIsotherms(ctx, view, sim.storm);
+      drawDrops(ctx, view, sim);
+      drawTrackedParcels(ctx, view, sim);
+      drawAxesAndGround(ctx, view, sim.storm);
+    },
+    readouts(sim) {
+      const st = sim.storm, c = { vapor: 0, liquid: 0, supercooled: 0, ice: 0 };
+      for (const d of sim.drops) c[d.state]++;
+      return [
+        ...SCENE_COMMON_READOUTS(sim),
+        ['−40 °C level', st.zForT(-40) === null ? 'above cloud top' : fmtKM(st.zForT(-40))],
+        ['Dew point at surface', fmtT(st.Td)],
+        ['Peak updraft', fmtSpeed(st.W)],
+        ['Peak cloud water', `${(st.lwcMax * 1000).toFixed(1)} g/m³`],
+        ['Parcels: air / liquid / supercooled / ice', `${c.vapor} / ${c.liquid} / ${c.supercooled} / ${c.ice}`],
+      ];
+    },
+  },
+
+  {
+    id: 'accretion',
+    tab: '2 · Freezing & Accretion',
+    title: 'Stage 2 — Freezing & Accretion',
+    duration: 45,
+    timeScale: 25,
+    wind: false,
+    zoomed: true,
+    controls: [
+      { key: 'localT', label: 'Local cloud temperature', min: -42, max: -2, step: 1, value: -15, fmt: v => `${v} °C` },
+    ],
+    legend: [
+      ['#7ff0ff', 'Supercooled droplet'],
+      ['#ffffff', 'Rime (frozen droplets)'],
+      ['rgba(120,185,255,0.9)', 'Water film (wet growth)'],
+      ['#cbbfa8', 'Embryo (ice crystal / graupel)'],
+    ],
+    lay: `<p>High in the cloud, a few droplets freeze around specks of dust and become <b>ice crystals</b>.
+      When a falling ice particle meets a supercooled droplet, the droplet freezes on contact.</p>
+      <p>Droplet by droplet, the crystal becomes a soft pellet called <b>graupel</b>, then a small
+      <b>hailstone</b>. The bigger it grows, the faster it falls through the rising air and the more droplets it sweeps
+      up, so growth speeds up.</p>
+      <p>This view zooms in on one stone. Change the <b>local cloud temperature</b>: in colder air droplets
+      freeze instantly into white rime, while in warmer air they spread into a film of water first. Below −40 °C
+      there are no liquid droplets left to collect.</p>`,
+    sci: `<ul>
+      <li>Accretion rate: <code>dM/dt = E·(πD²/4)·LWC·V<sub>t</sub></code>, so <code>dD/dt = E·LWC·V<sub>t</sub>/(2ρ<sub>i</sub>)</code>,
+      with E = 0.8 and ρ<sub>i</sub> = 900 kg/m³.</li>
+      <li>Fall speed: <code>V<sub>t</sub> = √(4gDρ<sub>i</sub> / 3C<sub>d</sub>ρ<sub>a</sub>)</code>, with C<sub>d</sub> = 0.6.</li>
+      <li>Droplets near the stone follow the potential flow around it. Only those with enough inertia hit it,
+      which is why the collection efficiency E is below 1.</li>
+      <li><b>Dry growth</b>: conduction and sublimation remove the latent heat of freezing as fast as it is released.
+      Droplets freeze on impact and trap air, making opaque rime.</li>
+      <li><b>Wet growth</b>: when accretion outpaces heat loss (warmer air, high LWC, larger stones), the surface stays at
+      0 °C under a water film, which freezes slowly into clear ice. This is the Schumann–Ludlam limit.</li></ul>`,
+    init(sim) {
+      sim.stone = makeHail(sim, 0, 0, 0.25e-3);
+      sim.drops = [];
+      sim.bumps = [];
+      sim.splashes = [];
+      sim.spawnAcc = 0;
+      sim.rot = 0;
+      sim.halfM = 1e-3;
+      sim.Rv = 0.125;
+      sim.env = { T: 0, z: 0, lwc: 0, V: 0 };
+    },
+    step(sim, dt, dtp) {
+      const st = sim.storm, s = sim.stone, rng = sim.rng;
+      const T = sim.params.localT;
+      const z = st.zForT(T) ?? st.top;
+      const lwc = st.lwc(st.xc, z, true);
+      const V = termVel(s.D, z, st);
+      sim.env = { T, z, lwc, V };
+      growHail(s, st, T, z, lwc, V, dtp);
+      s.age += dtp;
+      sim.halfM = Math.max(1e-3, 2.4 * s.D);
+      sim.Rv = (s.D / 2) / sim.halfM;
+      sim.rot += dt * 0.5;
+
+      // droplets stream up past the stone (stone's frame of reference)
+      const U = 0.9, R = sim.Rv, R2 = R * R, beta = 0.7, rd = 0.012;
+      sim.spawnAcc += dt * 60 * lwc / 2e-3;
+      while (sim.spawnAcc >= 1) { sim.spawnAcc--; sim.drops.push({ x: (rng() * 2 - 1) * 1.9, y: -1.15 }); }
+      const kept = [];
+      for (const d of sim.drops) {
+        const r2 = d.x * d.x + d.y * d.y, r4 = r2 * r2;
+        const fx = -2 * U * R2 * d.x * d.y / r4;
+        const fy = U * (1 - R2 * (d.y * d.y - d.x * d.x) / r4);
+        d.x += ((1 - beta) * fx) * dt;
+        d.y += ((1 - beta) * fy + beta * U) * dt;
+        if (Math.sqrt(d.x * d.x + d.y * d.y) < R + rd) {
+          const a = Math.atan2(d.y, d.x);
+          s.collected++;
+          if (s.regime === 'wet') sim.splashes.push({ a, life: 0.6 });
+          else sim.bumps.push({ a: a - sim.rot, D: s.D, s: 0.7 + rng() * 0.6 });
+          continue;
+        }
+        if (d.y < 1.25) kept.push(d);
+      }
+      sim.drops = kept;
+      sim.bumps = sim.bumps.filter(b => b.D > s.D * 0.6);
+      if (sim.bumps.length > 450) sim.bumps.splice(0, sim.bumps.length - 450);
+      for (const sp of sim.splashes) sp.life -= dt;
+      sim.splashes = sim.splashes.filter(sp => sp.life > 0);
+    },
+    draw(ctx, view, sim) {
+      drawMicro(ctx, view.W, view.H, sim);
+    },
+    readouts(sim) {
+      const s = sim.stone, e = sim.env;
+      const rows = [
+        ['Stone diameter', fmtMM(s.D)],
+        ['Fall speed through the air', fmtSpeed(e.V)],
+        ['Local altitude', fmtKM(e.z)],
+        ['Supercooled water', `${(e.lwc * 1000).toFixed(2)} g/m³`],
+        ['Growth mode', { wet: 'wet (clear ice)', dry: 'dry (opaque rime)', none: 'no growth', melt: 'melting' }[s.regime]],
+      ];
+      if (s.heat) {
+        rows.push(['Heat released / removable', `${(s.heat.release / 1000).toFixed(1)} / ${(s.heat.removal / 1000).toFixed(1)} kW/m²`]);
+      }
+      rows.push(['Droplets collected (shown)', `${s.collected}`]);
+      return rows;
+    },
+  },
+
+  {
+    id: 'layering',
+    tab: '3 · Layering',
+    title: 'Stage 3 — Layering',
+    duration: 60,
+    timeScale: 25,
+    wind: false,
+    selectable: true,
+    controls: [],
+    legend: [
+      ['#e8eef7', 'Path: dry growth (opaque)'],
+      ['rgba(120,185,255,0.9)', 'Path: wet growth (clear)'],
+      ['rgba(150,160,180,0.6)', 'Path: no growth'],
+      ['#7ff0ff', 'Supercooled cloud water'],
+    ],
+    lay: `<p>A hailstone does not make a single trip upward. Turbulence and the storm's circulation toss it up and down
+      through regions with different temperatures and amounts of liquid water.</p>
+      <p>In some regions droplets freeze instantly, trapping air and forming milky, <b>opaque</b> ice. In others,
+      a film of water freezes slowly into <b>clear</b> ice. Each pass through stage 2 adds a layer, like the rings of
+      a tree, so slicing a hailstone open reveals its history.</p>
+      <p class="hint">Click a hailstone to inspect its cross-section. Raise the turbulence to see more complicated paths.</p>`,
+    sci: `<ul>
+      <li>The layer type comes from the surface heat balance. Latent heat released by accreted water,
+      <code>F·(L<sub>f</sub> + c<sub>w</sub>·ΔT)</code>, is compared with heat lost by forced convection and sublimation,
+      <code>Nu = 2 + 0.6·Re<sup>½</sup>·Pr<sup>⅓</sup></code>.</li>
+      <li>Alternating clear and opaque layers come from changes in T, LWC and V<sub>t</sub> along the trajectory.
+      Discrete up-and-down cycles are not required.</li>
+      <li>A new layer is also recorded when growth resumes after more than 60 s outside the growth region (for example after a dip below freezing).</li>
+      <li>Turbulence is a divergence-free eddy field: a sum of stream-function modes that drift over time,
+      confined to the cloud.</li></ul>`,
+    init(sim) {
+      sim.drops = [];
+      sim.cwAcc = 0;
+      spawnCloudWater(sim, 240, true);
+      sim.hail = [];
+      for (let i = 0; i < 5; i++) sim.hail.push(makeEmbryo(sim));
+      if (App.selectedId === null || App.selectedId >= sim.nextId) App.selectedId = sim.hail[0].id;
+    },
+    step(sim, dt, dtp) {
+      cloudWaterStep(sim, dtp, 240);
+      const st = sim.storm;
+      sim.hail = sim.hail.map(h => {
+        updateHail(sim, h, dtp);
+        sweepDrops(sim, h);
+        const lost = h.z <= 0 || h.D < 0.5e-3 || h.x < 0 || h.x > st.width;
+        if (!lost) return h;
+        const fresh = makeEmbryo(sim);
+        if (h.id === App.selectedId) App.selectedId = fresh.id;
+        return fresh;
+      });
+    },
+    draw(ctx, view, sim, dpr) {
+      drawStormBackground(ctx, view, sim.storm, dpr);
+      if (App.showWind) drawWindField(ctx, view, sim);
+      drawIsotherms(ctx, view, sim.storm);
+      drawDrops(ctx, view, sim);
+      drawHail(ctx, view, sim, { trails: true });
+      drawAxesAndGround(ctx, view, sim.storm);
+      const sel = sim.hail.find(h => h.id === App.selectedId);
+      if (sel) drawCrossSection(ctx, sel, view.ox + 86, view.oy + 66, 62);
+    },
+    readouts(sim) {
+      const h = sim.hail.find(x => x.id === App.selectedId);
+      const rows = SCENE_COMMON_READOUTS(sim);
+      if (!h) return [...rows, ['Selected stone', 'none (click one)']];
+      return [
+        ...rows,
+        ['Selected stone diameter', fmtMM(h.D)],
+        ['Layers', `${h.layers.length}`],
+        ['Growth mode', { wet: 'wet (clear)', dry: 'dry (opaque)', none: 'none', melt: 'melting' }[h.regime]],
+        ['Altitude / temperature', `${fmtKM(h.z)} / ${fmtT(h.T)}`],
+        ['Updraft vs fall speed', `${h.w.toFixed(1)} vs ${h.V.toFixed(1)} m/s`],
+        ['Time aloft', fmtClock(h.age)],
+      ];
+    },
+  },
+
+  {
+    id: 'falling',
+    tab: '4 · Falling Hail',
+    title: 'Stage 4 — Falling Hail',
+    duration: 60,
+    timeScale: 20,
+    wind: false,
+    selectable: true,
+    controls: [],
+    legend: [
+      ['#ffffff', 'Hailstone (size exaggerated)'],
+      ['#4da3ff', 'Rain from melted hail'],
+      ['#7ff0ff', 'Supercooled cloud water'],
+      ['#ffb15e', 'Selected stone'],
+    ],
+    lay: `<p>A hailstone stays aloft only while the updraft pushes it up harder than gravity pulls it down. As it grows,
+      it falls faster, until the updraft can no longer hold it. Then it drops out of the storm, and large stones can
+      reach well over 100 km/h.</p>
+      <p>Below the freezing level it starts to <b>melt</b>. Small stones turn into rain, while large ones reach the
+      ground as hail.</p>
+      <p class="hint">Try a stronger updraft. It holds stones up longer, so they grow larger before they fall.</p>`,
+    sci: `<ul>
+      <li>A stone falls out once <code>V<sub>t</sub>(D) &gt; w</code>. The largest diameter the peak updraft can support is
+      <code>D<sub>max</sub> = 3C<sub>d</sub>ρ<sub>a</sub>w² / (4gρ<sub>i</sub>)</code>, evaluated at the height of peak w.</li>
+      <li>Below 0 °C, melting follows <code>dD/dt = −2h(T − 0)/(ρ<sub>i</sub>L<sub>f</sub>)</code>, and meltwater is assumed
+      to shed. Stones smaller than about 5 mm usually melt completely before reaching the ground.</li>
+      <li>New embryos keep entering the growth zone, so the storm produces a spread of sizes. The ground record
+      collects the stones that survived.</li></ul>`,
+    init(sim) {
+      sim.drops = [];
+      sim.cwAcc = 0;
+      spawnCloudWater(sim, 220, true);
+      sim.hail = [];
+      sim.rain = [];
+      sim.landed = [];
+      sim.rainCount = 0;
+      sim.embryoAcc = 0;
+      const st = sim.storm, r = sim.rng;
+      for (let i = 0; i < 16; i++) {
+        const z = st.zForT(-8 - r() * 20) ?? st.top * 0.6;
+        sim.hail.push(makeHail(sim, st.xc + (r() * 2 - 1) * 0.7 * st.R, z, (4 + r() * 30) * 1e-3));
+      }
+    },
+    step(sim, dt, dtp) {
+      cloudWaterStep(sim, dtp, 220);
+      const st = sim.storm;
+      sim.embryoAcc += dt;
+      if (sim.embryoAcc >= 2.5 && sim.hail.length < 40) { sim.embryoAcc = 0; sim.hail.push(makeEmbryo(sim)); }
+      const kept = [];
+      for (const h of sim.hail) {
+        updateHail(sim, h, dtp);
+        sweepDrops(sim, h);
+        if (h.x < 0 || h.x > st.width) continue;
+        if (h.D < 0.5e-3) { sim.rain.push({ x: h.x, z: h.z }); continue; }
+        if (h.z <= 0) { sim.landed.push({ x: h.x, D: h.D }); continue; }
+        kept.push(h);
+      }
+      sim.hail = kept;
+      const v = sim.vtmp;
+      sim.rain = sim.rain.filter(rd => {
+        st.vel(rd.x, rd.z, sim.tp, v);
+        rd.x += v.u * dtp;
+        rd.z += (Math.min(v.w, 4) - 8) * dtp;
+        if (rd.z <= 0) { sim.rainCount++; return false; }
+        return true;
+      });
+    },
+    draw(ctx, view, sim, dpr) {
+      const st = sim.storm;
+      drawStormBackground(ctx, view, st, dpr);
+      if (App.showWind) drawWindField(ctx, view, sim);
+      drawIsotherms(ctx, view, st);
+      drawDrops(ctx, view, sim);
+      ctx.strokeStyle = 'rgba(77,163,255,0.8)';
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      for (const rd of sim.rain) {
+        const px = view.sx(rd.x), py = view.sy(rd.z);
+        ctx.moveTo(px, py - 5);
+        ctx.lineTo(px, py + 2);
+      }
+      ctx.stroke();
+      drawHail(ctx, view, sim, { streaks: true });
+      drawAxesAndGround(ctx, view, st);
+      let largest = null;
+      const groundH = view.H - view.yGround;
+      sim.landed.forEach((l, i) => {
+        const r = hailRadiusPx(l.D) * 0.7;
+        const jitter = ((i * 0.618034) % 1) * Math.max(0, groundH - 2 * r - 14);
+        const spread = (((i * 0.381966) % 1) - 0.5) * 24;
+        hailFill(ctx, { layers: [] }, view.sx(l.x) + spread, view.yGround + r + 2 + jitter, r);
+        if (!largest || l.D > largest.D) largest = l;
+      });
+      if (largest) {
+        ctx.fillStyle = '#e6ecf5';
+        ctx.font = '600 11px system-ui';
+        ctx.textAlign = 'center';
+        ctx.fillText(`largest: ${fmtMM(largest.D)}`, view.sx(largest.x), view.H - 4);
+      }
+      const sel = sim.hail.find(h => h.id === App.selectedId);
+      if (sel) drawCrossSection(ctx, sel, view.ox + 86, view.oy + 66, 62);
+    },
+    readouts(sim) {
+      const st = sim.storm;
+      const falling = sim.hail.filter(h => h.w - h.V < -4).length;
+      const largest = sim.landed.reduce((m, l) => Math.max(m, l.D), 0);
+      return [
+        ...SCENE_COMMON_READOUTS(sim),
+        ['Largest stone the updraft can hold', fmtMM(st.maxSupportedD())],
+        ['Stones aloft / falling', `${sim.hail.length - falling} / ${falling}`],
+        ['Hailstones on the ground', `${sim.landed.length}`],
+        ['Largest at ground', largest ? fmtMM(largest) : '—'],
+        ['Melted to rain', `${sim.rainCount + sim.rain.length}`],
+      ];
+    },
+  },
+];
+
+// Zoomed-in view used by the accretion scene.
+function drawMicro(ctx, W, H, sim) {
+  const bg = ctx.createLinearGradient(0, 0, 0, H);
+  bg.addColorStop(0, '#2c3a52');
+  bg.addColorStop(1, '#141d2d');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, W, H);
+
+  const cx = W * 0.45, cy = H * 0.5, s = H * 0.5;
+  const toX = x => cx + x * s, toY = y => cy - y * s;
+  const R = sim.Rv, Rpx = R * s, s0 = sim.stone;
+
+  // streamlines of the airflow around the stone
+  ctx.strokeStyle = 'rgba(255,255,255,0.07)';
+  ctx.lineWidth = 1;
+  for (let x0 = -1.9; x0 <= 1.9; x0 += 0.16) {
+    if (Math.abs(x0) < 0.05) continue;
+    let x = x0, y = -1.2;
+    ctx.beginPath();
+    ctx.moveTo(toX(x), toY(y));
+    for (let i = 0; i < 140 && y < 1.2; i++) {
+      const r2 = x * x + y * y, r4 = r2 * r2, R2 = R * R;
+      const fx = -2 * R2 * x * y / r4, fy = 1 - R2 * (y * y - x * x) / r4;
+      const n = Math.hypot(fx, fy) || 1;
+      x += fx / n * 0.025;
+      y += fy / n * 0.025;
+      ctx.lineTo(toX(x), toY(y));
+    }
+    ctx.stroke();
+  }
+
+  // droplets
+  ctx.fillStyle = DROP_STYLE.supercooled;
+  for (const d of sim.drops) {
+    ctx.beginPath();
+    ctx.arc(toX(d.x), toY(d.y), 3, 0, TAU);
+    ctx.fill();
+  }
+
+  // stone: hexagonal ice crystal that rounds into graupel / hail
+  const crystal = clamp((0.9e-3 - s0.D) / 0.5e-3, 0, 1);
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate(sim.rot);
+  if (crystal > 0) {
+    ctx.globalAlpha = crystal;
+    ctx.fillStyle = 'rgba(225,240,255,0.85)';
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    for (let i = 0; i < 6; i++) {
+      const a = i * Math.PI / 3;
+      ctx[i ? 'lineTo' : 'moveTo'](Math.cos(a) * Rpx, Math.sin(a) * Rpx);
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.beginPath();
+    for (let i = 0; i < 3; i++) {
+      const a = i * Math.PI / 3;
+      ctx.moveTo(-Math.cos(a) * Rpx, -Math.sin(a) * Rpx);
+      ctx.lineTo(Math.cos(a) * Rpx, Math.sin(a) * Rpx);
+    }
+    ctx.strokeStyle = 'rgba(150,190,230,0.8)';
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1 - crystal;
+  if (crystal < 1) hailFill(ctx, s0, 0, 0, Rpx);
+  ctx.globalAlpha = 1;
+  // rime bumps (frozen droplets), rotating with the tumbling stone
+  for (const b of sim.bumps) {
+    const rr = Rpx * Math.min(1, b.D / s0.D) * (crystal > 0.5 ? 0.9 : 1);
+    ctx.fillStyle = 'rgba(250,252,255,0.95)';
+    ctx.beginPath();
+    ctx.arc(Math.cos(b.a) * rr, -Math.sin(b.a) * rr, 2.6 * b.s, 0, TAU);
+    ctx.fill();
+  }
+  ctx.restore();
+
+  // water film and splashes in wet growth
+  if (s0.regime === 'wet') {
+    ctx.strokeStyle = 'rgba(120,185,255,0.55)';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.arc(cx, cy, Rpx + 2, 0, TAU);
+    ctx.stroke();
+  }
+  for (const sp of sim.splashes) {
+    ctx.fillStyle = `rgba(150,205,255,${sp.life})`;
+    ctx.save();
+    ctx.translate(toX(Math.cos(sp.a) * R), toY(Math.sin(sp.a) * R));
+    ctx.rotate(-sp.a + Math.PI / 2);
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 3 + (0.6 - sp.life) * 14, 2.5, 0, 0, TAU);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // captions
+  const e = sim.env;
+  ctx.fillStyle = 'rgba(8,14,26,0.7)';
+  ctx.fillRect(0, 0, W, 76);
+  ctx.fillStyle = '#e6ecf5';
+  ctx.font = '600 13px system-ui';
+  ctx.textAlign = 'left';
+  ctx.fillText(`Zoomed in: inside the cloud at ${e.T} °C (about ${fmtKM(e.z)} up)`, 16, 24);
+  ctx.font = '12px system-ui';
+  ctx.fillStyle = '#97a6bf';
+  ctx.fillText('Seen from the falling stone: air and droplets stream upward past it. Droplets are enlarged and slowed down.', 16, 42);
+  if (e.lwc <= 0.1 * sim.storm.lwcMax) {
+    ctx.fillStyle = '#ffb15e';
+    ctx.font = '600 13px system-ui';
+    ctx.fillText(e.T <= -40 ? 'Too cold: every droplet has already frozen, so the stone cannot grow by accretion.'
+                            : 'Almost no liquid water left at this level, so accretion has nearly stopped.', 16, 64);
+  } else {
+    const label = { wet: 'WET GROWTH: water film freezes slowly into clear ice',
+                    dry: 'DRY GROWTH: droplets freeze instantly into opaque rime' }[s0.regime] || '';
+    ctx.fillStyle = s0.regime === 'wet' ? '#8cc6ff' : '#ffffff';
+    ctx.font = '600 13px system-ui';
+    ctx.fillText(label, 16, 64);
+  }
+
+  // airflow arrow
+  ctx.strokeStyle = 'rgba(255,177,94,0.8)';
+  ctx.fillStyle = 'rgba(255,177,94,0.9)';
+  ctx.lineWidth = 2;
+  const ax = 30, ay0 = H - 50, ay1 = H - 120;
+  ctx.beginPath();
+  ctx.moveTo(ax, ay0);
+  ctx.lineTo(ax, ay1);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(ax, ay1 - 8);
+  ctx.lineTo(ax - 6, ay1 + 2);
+  ctx.lineTo(ax + 6, ay1 + 2);
+  ctx.fill();
+  ctx.font = '11px system-ui';
+  ctx.fillText(`air ${e.V.toFixed(1)} m/s`, ax + 10, (ay0 + ay1) / 2);
+
+  // scale bar
+  const mPerPx = sim.halfM / s;
+  const nice = [0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50].map(v => v * 1e-3);
+  const target = W * 0.15 * mPerPx;
+  const len = nice.reduce((b, v) => (Math.abs(v - target) < Math.abs(b - target) ? v : b), nice[0]);
+  const lpx = len / mPerPx;
+  const bx = 70, by = H - 22;
+  ctx.strokeStyle = '#e6ecf5';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(bx, by);
+  ctx.lineTo(bx + lpx, by);
+  ctx.moveTo(bx, by - 5);
+  ctx.lineTo(bx, by + 5);
+  ctx.moveTo(bx + lpx, by - 5);
+  ctx.lineTo(bx + lpx, by + 5);
+  ctx.stroke();
+  ctx.fillStyle = '#e6ecf5';
+  ctx.textAlign = 'center';
+  ctx.fillText(`${+(len * 1000).toFixed(1)} mm`, bx + lpx / 2, by - 8);
+
+  drawCrossSection(ctx, s0, W - 90, H - 150, 56);
+}
+
+// ============================================================================
+// App: timeline, controls, rendering
+// ============================================================================
+
+const GLOBAL_PARAMS = [
+  { key: 'updraft', label: 'Peak updraft', min: 5, max: 60, step: 1, value: 30, fmt: v => `${v} m/s · ${Math.round(v * 2.237)} mph` },
+  { key: 'temp', label: 'Surface temperature', min: 12, max: 38, step: 1, value: 28, fmt: v => `${v} °C · ${Math.round(v * 9 / 5 + 32)} °F` },
+  { key: 'humidity', label: 'Surface humidity', min: 30, max: 100, step: 1, value: 65,
+    fmt: v => `${v}% · dew pt ${dewPoint(+document.getElementById('p-temp').value, v).toFixed(0)} °C` },
+  { key: 'turbulence', label: 'Turbulence', min: 0, max: 20, step: 0.5, value: 8, fmt: v => `${v} m/s` },
+];
+
+const DT = 1 / 60;   // fixed animation-time step, so a given position always gives the same result
+
+const App = {
+  idx: 0,
+  sim: null,
+  playing: true,
+  speed: 1,
+  showWind: true,
+  selectedId: null,
+  dirty: false,
+  pendingSeek: null,
+  sceneParams: {},
+};
+
+const storm = new Storm(Object.fromEntries(GLOBAL_PARAMS.map(p => [p.key, p.value])));
+for (const sc of SCENES) App.sceneParams[sc.id] = Object.fromEntries(sc.controls.map(c => [c.key, c.value]));
+
+const scene = () => SCENES[App.idx];
+
+function newSim() {
+  const sc = scene();
+  const sim = {
+    n: 0, t: 0, tp: 0, nextId: 0,
+    rng: mulberry32(20240 + App.idx),
+    storm, vtmp: { u: 0, w: 0 },
+    params: App.sceneParams[sc.id],
+  };
+  sc.init(sim);
+  return sim;
+}
+
+function seek(target) {
+  const sc = scene();
+  const nTarget = Math.floor(clamp(target, 0, sc.duration) / DT + 1e-6);
+  if (!App.sim || nTarget < App.sim.n) App.sim = newSim();
+  const sim = App.sim;
+  while (sim.n < nTarget) {
+    sc.step(sim, DT, DT * sc.timeScale);
+    sim.n++;
+    sim.t = sim.n * DT;
+    sim.tp = sim.t * sc.timeScale;
+  }
+}
+
+function rerun() {
+  const t = App.sim ? App.sim.t : 0;
+  App.sim = null;
+  seek(t);
+}
+
+// ---- canvas ----
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+let cw = 0, ch = 0, dpr = 1;
+
+function resize() {
+  const rect = canvas.parentElement.getBoundingClientRect();
+  dpr = window.devicePixelRatio || 1;
+  cw = Math.max(320, rect.width);
+  ch = Math.max(300, rect.height);
+  canvas.width = Math.round(cw * dpr);
+  canvas.height = Math.round(ch * dpr);
+}
+new ResizeObserver(resize).observe(canvas.parentElement);
+resize();
+
+function currentView() { return makeStormView(cw, ch, storm); }
+
+function render() {
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  scene().draw(ctx, currentView(), App.sim, dpr);
+}
+
+canvas.addEventListener('click', ev => {
+  const sc = scene();
+  if (!sc.selectable || !App.sim) return;
+  const rect = canvas.getBoundingClientRect();
+  const px = ev.clientX - rect.left, py = ev.clientY - rect.top;
+  const view = currentView();
+  let best = null, bestD = 30;
+  for (const h of App.sim.hail) {
+    const d = Math.hypot(view.sx(h.x) - px, view.sy(h.z) - py) - hailRadiusPx(h.D);
+    if (d < bestD) { bestD = d; best = h; }
+  }
+  App.selectedId = best ? best.id : null;
+});
+
+// ---- DOM ----
+const el = id => document.getElementById(id);
+
+function buildTabs() {
+  el('tabs').innerHTML = '';
+  SCENES.forEach((sc, i) => {
+    const b = document.createElement('button');
+    b.className = 'tab';
+    b.textContent = sc.tab;
+    b.onclick = () => goTo(i);
+    el('tabs').appendChild(b);
+  });
+}
+
+function paramControl(def, value, isScene, onChange) {
+  const wrap = document.createElement('div');
+  wrap.className = 'param' + (isScene ? ' scene' : '');
+  const id = (isScene ? 's-' : 'p-') + def.key;
+  wrap.innerHTML = `<label for="${id}"><span>${def.label}</span><b></b></label>
+    <input type="range" id="${id}" min="${def.min}" max="${def.max}" step="${def.step}" value="${value}">`;
+  const input = wrap.querySelector('input'), out = wrap.querySelector('b');
+  const show = () => { out.textContent = def.fmt(+input.value); };
+  input.addEventListener('input', () => { onChange(+input.value); show(); refreshParamLabels(); });
+  wrap.refresh = show;
+  return wrap;
+}
+
+let paramEls = [];
+function refreshParamLabels() { for (const w of paramEls) w.refresh(); }
+
+function buildParams() {
+  const box = el('params');
+  box.innerHTML = '';
+  paramEls = [];
+  for (const def of GLOBAL_PARAMS) {
+    const w = paramControl(def, storm.p[def.key], false, v => {
+      storm.set({ ...storm.p, [def.key]: v });
+      App.dirty = true;
+    });
+    box.appendChild(w);
+    paramEls.push(w);
+  }
+  const sc = scene();
+  for (const def of sc.controls) {
+    const w = paramControl(def, App.sceneParams[sc.id][def.key], true, v => {
+      App.sceneParams[sc.id][def.key] = v;
+      App.dirty = true;
+    });
+    box.appendChild(w);
+    paramEls.push(w);
+  }
+  refreshParamLabels();
+}
+
+function buildSidePanel() {
+  const sc = scene();
+  el('sceneTitle').textContent = sc.title;
+  el('sceneLay').innerHTML = sc.lay;
+  el('sceneSci').innerHTML = sc.sci;
+  el('legend').innerHTML = sc.legend.map(([c, l]) => `<div><span class="sw" style="background:${c}"></span>${l}</div>`).join('');
+  [...el('tabs').children].forEach((b, i) => b.classList.toggle('active', i === App.idx));
+}
+
+function goTo(i) {
+  App.idx = (i + SCENES.length) % SCENES.length;
+  const sc = scene();
+  App.showWind = sc.wind;
+  el('showWind').checked = App.showWind;
+  App.selectedId = null;
+  el('timeline').max = sc.duration;
+  history.replaceState(null, '', `#slide-${App.idx + 1}`);
+  buildSidePanel();
+  buildParams();
+  App.sim = null;
+  seek(0);
+}
+
+let readoutTick = 0;
+function updateUI() {
+  const sc = scene(), sim = App.sim;
+  if (document.activeElement !== el('timeline')) el('timeline').value = sim.t;
+  el('timeLabel').textContent = `storm time ${fmtClock(sim.tp)} / ${fmtClock(sc.duration * sc.timeScale)}`;
+  if (readoutTick++ % 8 === 0) {
+    el('readouts').innerHTML = sc.readouts(sim).map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join('');
+  }
+}
+
+function setPlaying(p) {
+  App.playing = p;
+  el('play').textContent = p ? '❚❚ Pause' : '▶ Play';
+}
+
+el('prev').onclick = () => goTo(App.idx - 1);
+el('next').onclick = () => goTo(App.idx + 1);
+el('play').onclick = () => setPlaying(!App.playing);
+el('speed').onchange = e => { App.speed = +e.target.value; };
+el('showWind').onchange = e => { App.showWind = e.target.checked; };
+el('timeline').addEventListener('input', e => { App.pendingSeek = +e.target.value; });
+el('reset').onclick = () => {
+  storm.set(Object.fromEntries(GLOBAL_PARAMS.map(p => [p.key, p.value])));
+  const sc = scene();
+  for (const c of sc.controls) App.sceneParams[sc.id][c.key] = c.value;
+  buildParams();
+  App.dirty = true;
+};
+
+document.addEventListener('keydown', e => {
+  const tag = e.target.tagName;
+  if (tag === 'SELECT' || (tag === 'INPUT' && e.target.type === 'range' && e.key.startsWith('Arrow'))) return;
+  if (e.key === 'ArrowRight') goTo(App.idx + 1);
+  else if (e.key === 'ArrowLeft') goTo(App.idx - 1);
+  else if (e.key === ' ') { e.preventDefault(); setPlaying(!App.playing); }
+});
+
+// ---- main loop ----
+let last = performance.now();
+function frame(now) {
+  const dtReal = Math.min(0.1, (now - last) / 1000);
+  last = now;
+  if (App.dirty) { App.dirty = false; rerun(); }
+  if (App.pendingSeek !== null) { seek(App.pendingSeek); App.pendingSeek = null; }
+  else if (App.playing) {
+    const target = App.sim.t + dtReal * App.speed;
+    if (target >= scene().duration) { App.sim = null; seek(0); }
+    else seek(target);
+  }
+  render();
+  updateUI();
+  requestAnimationFrame(frame);
+}
+
+buildTabs();
+const m = location.hash.match(/slide-(\d)/);
+goTo(m ? clamp(+m[1] - 1, 0, SCENES.length - 1) : 0);
+requestAnimationFrame(frame);
+</script>
 </body>
 </html>
