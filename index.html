@@ -935,21 +935,30 @@ const SCENES = [
       ['#ffffff', 'Ice crystal'],
       ['#ffd678', 'Tracked air parcel'],
     ],
-    lay: `<p>Thunderstorms feed on warm, humid air near the ground. That air is warmer and lighter than its
-      surroundings, so it rises in a strong current called the <b>updraft</b>.</p>
-      <p>As it climbs, it expands and cools. At the <b>cloud base</b> it has cooled to its dew point, and its water
-      vapor condenses into countless tiny cloud droplets. Follow the yellow parcels to see the temperature drop.</p>
+    lay: `<p>Thunderstorms feed on warm, humid air near the ground. Something has to give that air a push upward first,
+      such as a cold front, hills, or the edge of another storm's outflow.</p>
+      <p>As the air climbs, it expands and cools. At the <b>cloud base</b> it has cooled enough for its water vapor to
+      condense into countless tiny cloud droplets. Condensation releases heat, which keeps the rising air warmer and
+      lighter than its surroundings, so it accelerates upward in a strong current called the <b>updraft</b>. Follow
+      the yellow parcels to see the temperature drop.</p>
       <p>Above the freezing level, most droplets stay liquid even though they are colder than 0 °C. These
       <b>supercooled</b> droplets are the raw material for hail.</p>`,
     sci: `<ul>
       <li>Below cloud base, rising air cools at the dry adiabatic lapse rate (9.8 °C/km). Above it, latent heat from
-      condensation cuts the cooling to a moist rate of about 6 °C/km.</li>
-      <li>Cloud base is the lifting condensation level, estimated as <code>LCL ≈ 125 m × (T − T<sub>d</sub>)</code>.</li>
-      <li>The updraft comes from a stream function, so the flow conserves mass: low-level inflow converges into the
-      core and diverges into the anvil.</li>
-      <li>Cloud droplets (10–50 µm) fall at only a few cm/s, so they act as tracers of the airflow.</li>
-      <li>Some droplets freeze on ice-nucleating particles below about −12 °C. The rest stay liquid until
-      homogeneous freezing near −38 °C.</li></ul>`,
+      condensation reduces the cooling to the moist adiabatic rate. That rate is about 4 °C/km in warm, humid air
+      and increases with height. The model uses a constant 6 °C/km.</li>
+      <li>Cloud base for a surface-based storm is the lifting condensation level, estimated as
+      <code>LCL ≈ 125 m × (T − T<sub>d</sub>)</code>.</li>
+      <li>Air rising from the surface is usually lifted to its level of free convection before it becomes buoyant.
+      Buoyancy above that level (CAPE) is what drives updrafts of 20–50+ m/s in severe storms.</li>
+      <li>The updraft comes from a 2-D stream function, so the flow is divergence-free: low-level inflow converges
+      into the core and diverges into the anvil. Real storms satisfy the density-weighted (anelastic) form of
+      continuity, which this simplifies.</li>
+      <li>Cloud droplets are typically 5–20 µm across and fall at under a few cm/s, so they act as tracers of the
+      airflow.</li>
+      <li>Ice-nucleating particles, such as mineral dust and some biological particles, become active from about
+      −5 to −15 °C, and their numbers rise sharply as it gets colder. The model starts freezing droplets at −12 °C.
+      Any droplets left freeze homogeneously near −38 °C.</li></ul>`,
     init(sim) {
       sim.drops = [];
       sim.spawnAcc = 0;
@@ -1003,22 +1012,33 @@ const SCENES = [
     ],
     lay: `<p>High in the cloud, a few droplets freeze around specks of dust and become <b>ice crystals</b>.
       When a falling ice particle meets a supercooled droplet, the droplet freezes on contact.</p>
-      <p>Droplet by droplet, the crystal becomes a soft pellet called <b>graupel</b>, then a small
-      <b>hailstone</b>. The bigger it grows, the faster it falls through the rising air and the more droplets it sweeps
-      up, so growth speeds up.</p>
-      <p>This view zooms in on one stone. Change the <b>local cloud temperature</b>: in colder air droplets
-      freeze instantly into white rime, while in warmer air they spread into a film of water first. Below −40 °C
-      there are no liquid droplets left to collect.</p>`,
+      <p>Droplet by droplet, the crystal becomes a soft pellet called <b>graupel</b>. Once it is at least 5 mm
+      across, it counts as a <b>hailstone</b>. Frozen raindrops can also start hailstones. The bigger a stone grows,
+      the faster it falls through the rising air and the more droplets it sweeps up, so growth speeds up.</p>
+      <p>This view zooms in on one stone. Freezing releases heat, and the air around the stone can only carry away so
+      much. While the stone is small, or the air is very cold, each droplet freezes the instant it lands, making
+      white <b>rime</b>. As the stone grows, water arrives faster than it can freeze, so the surface stays wet and
+      freezes gradually into <b>clear ice</b>. Try changing the <b>local cloud temperature</b>. Below −40 °C there
+      are no liquid droplets left to collect.</p>`,
     sci: `<ul>
-      <li>Accretion rate: <code>dM/dt = E·(πD²/4)·LWC·V<sub>t</sub></code>, so <code>dD/dt = E·LWC·V<sub>t</sub>/(2ρ<sub>i</sub>)</code>,
-      with E = 0.8 and ρ<sub>i</sub> = 900 kg/m³.</li>
-      <li>Fall speed: <code>V<sub>t</sub> = √(4gDρ<sub>i</sub> / 3C<sub>d</sub>ρ<sub>a</sub>)</code>, with C<sub>d</sub> = 0.6.</li>
-      <li>Droplets near the stone follow the potential flow around it. Only those with enough inertia hit it,
-      which is why the collection efficiency E is below 1.</li>
-      <li><b>Dry growth</b>: conduction and sublimation remove the latent heat of freezing as fast as it is released.
-      Droplets freeze on impact and trap air, making opaque rime.</li>
-      <li><b>Wet growth</b>: when accretion outpaces heat loss (warmer air, high LWC, larger stones), the surface stays at
-      0 °C under a water film, which freezes slowly into clear ice. This is the Schumann–Ludlam limit.</li></ul>`,
+      <li>Hail embryos are mostly graupel or frozen drops. Graupel is 2–5 mm, and hail is defined as 5 mm or larger.</li>
+      <li>Accretion rate: <code>dM/dt = E·(πD²/4)·LWC·V<sub>t</sub></code>, so <code>dD/dt = E·LWC·V<sub>t</sub>/(2ρ<sub>i</sub>)</code>.
+      This uses E = 0.8 and ρ<sub>i</sub> = 900 kg/m³, and treats the droplets' own fall speed as negligible. Real hail
+      density ranges from about 700 to 900 kg/m³, and is lower for graupel and heavily rimed ice.</li>
+      <li>Fall speed: <code>V<sub>t</sub> = √(4gDρ<sub>i</sub> / 3C<sub>d</sub>ρ<sub>a</sub>)</code>, with C<sub>d</sub> = 0.6.
+      Measured drag coefficients range from about 0.45 to 0.8, depending on shape and surface roughness.</li>
+      <li>Droplets near the stone follow an idealized potential flow around it. Only those with enough inertia hit it
+      (inertial impaction), which is why the collection efficiency E is below 1.</li>
+      <li><b>Dry growth</b>: convection, conduction and sublimation remove the latent heat of freezing as fast as
+      accretion releases it. The surface stays below 0 °C, droplets freeze on impact, and the air trapped between
+      the frozen droplets makes opaque rime.</li>
+      <li><b>Wet growth</b>: past the Schumann–Ludlam limit, accretion releases more heat than the surface can lose.
+      That happens with warmer air, higher LWC, or larger, faster-falling stones. The surface warms to 0 °C under a
+      liquid film, and the film freezes only as fast as heat escapes, so air can leave and the ice forms clear.
+      The heat released per unit area grows roughly as D<sup>0.5</sup>, while the heat removed falls roughly as
+      D<sup>−0.25</sup>, so larger stones tend toward wet growth.</li>
+      <li>Model simplification: wet-growth stones keep all the water they collect. Real stones either shed the excess
+      or soak it up as spongy ice, so the model somewhat overestimates how fast large stones grow.</li></ul>`,
     init(sim) {
       sim.stone = makeHail(sim, 0, 0, 0.25e-3);
       sim.drops = [];
@@ -1113,18 +1133,25 @@ const SCENES = [
       ['rgba(150,160,180,0.6)', 'Path: no growth'],
       ['#7ff0ff', 'Supercooled cloud water'],
     ],
-    lay: `<p>A hailstone does not make a single trip upward. Turbulence and the storm's circulation toss it up and down
-      through regions with different temperatures and amounts of liquid water.</p>
+    lay: `<p>While it grows, a hailstone is carried through the storm along a looping path. Turbulence and the storm's
+      circulation move it through regions with different temperatures and amounts of liquid water.</p>
       <p>In some regions droplets freeze instantly, trapping air and forming milky, <b>opaque</b> ice. In others,
-      a film of water freezes slowly into <b>clear</b> ice. Each pass through stage 2 adds a layer, like the rings of
-      a tree, so slicing a hailstone open reveals its history.</p>
+      water arrives faster than it can freeze, and the wet surface freezes gradually into <b>clear</b> ice. Each
+      change in conditions adds a layer, like the rings of a tree, so slicing a hailstone open reveals its history.</p>
+      <p>You may have heard that hailstones make many up-and-down trips. Research suggests most make only one or two,
+      and the layers mainly record the changing conditions along the way.</p>
       <p class="hint">Click a hailstone to inspect its cross-section. Raise the turbulence to see more complicated paths.</p>`,
     sci: `<ul>
       <li>The layer type comes from the surface heat balance. Latent heat released by accreted water,
-      <code>F·(L<sub>f</sub> + c<sub>w</sub>·ΔT)</code>, is compared with heat lost by forced convection and sublimation,
-      <code>Nu = 2 + 0.6·Re<sup>½</sup>·Pr<sup>⅓</sup></code>.</li>
+      <code>F·(L<sub>f</sub> + c<sub>w</sub>·ΔT)</code> with ΔT = 0 − T, is compared with heat lost by forced
+      convection and sublimation. Convection uses the Ranz–Marshall correlation
+      <code>Nu = 2 + 0.6·Re<sup>½</sup>·Pr<sup>⅓</sup></code>, and sublimation uses the analogous Sherwood number.
+      Real hailstones lose heat somewhat faster than this, because of surface roughness and tumbling.</li>
       <li>Alternating clear and opaque layers come from changes in T, LWC and V<sub>t</sub> along the trajectory.
-      Discrete up-and-down cycles are not required.</li>
+      Hail trajectory models and studies of hailstone layers suggest most large stones make only one or two vertical
+      cycles, so many cycles are not needed to form many layers.</li>
+      <li>Cloud water in the model is deliberately patchy, to stand in for entrainment of dry air. That patchiness
+      is what makes stones cross back and forth over the wet/dry limit.</li>
       <li>A new layer is also recorded when growth resumes after more than 60 s outside the growth region (for example after a dip below freezing).</li>
       <li>Turbulence is a divergence-free eddy field: a sum of stream-function modes that drift over time,
       confined to the cloud.</li></ul>`,
@@ -1190,17 +1217,23 @@ const SCENES = [
       ['#7ff0ff', 'Supercooled cloud water'],
       ['#ffb15e', 'Selected stone'],
     ],
-    lay: `<p>A hailstone stays aloft only while the updraft pushes it up harder than gravity pulls it down. As it grows,
-      it falls faster, until the updraft can no longer hold it. Then it drops out of the storm, and large stones can
-      reach well over 100 km/h.</p>
+    lay: `<p>A hailstone stays aloft only while the air around it rises faster than the stone falls through it. As
+      it grows, it falls faster, until the updraft can no longer hold it. Stones also fall when the storm's winds carry
+      them out of the updraft. Golf-ball-sized and larger stones can hit the ground at 100 km/h (60 mph) or more.</p>
       <p>Below the freezing level it starts to <b>melt</b>. Small stones turn into rain, while large ones reach the
-      ground as hail.</p>
+      ground as hail. In the US, hail 1 inch (25 mm) or larger counts as severe.</p>
       <p class="hint">Try a stronger updraft. It holds stones up longer, so they grow larger before they fall.</p>`,
     sci: `<ul>
       <li>A stone falls out once <code>V<sub>t</sub>(D) &gt; w</code>. The largest diameter the peak updraft can support is
-      <code>D<sub>max</sub> = 3C<sub>d</sub>ρ<sub>a</sub>w² / (4gρ<sub>i</sub>)</code>, evaluated at the height of peak w.</li>
+      <code>D<sub>max</sub> = 3C<sub>d</sub>ρ<sub>a</sub>w² / (4gρ<sub>i</sub>)</code>, evaluated at the height of peak w.
+      In real storms, large hail also needs a broad updraft and a long enough stay in the hail growth zone. A strong
+      but narrow updraft can carry embryos through the growth zone too quickly for them to grow.</li>
       <li>Below 0 °C, melting follows <code>dD/dt = −2h(T − 0)/(ρ<sub>i</sub>L<sub>f</sub>)</code>, and meltwater is assumed
-      to shed. Stones smaller than about 5 mm usually melt completely before reaching the ground.</li>
+      to shed. The model uses air temperature and ignores evaporative cooling. In dry air below the cloud, evaporation
+      slows melting, which is why forecasters look at the wet-bulb zero height rather than the freezing level.</li>
+      <li>With a freezing level around 3–4 km, stones smaller than roughly 5–10 mm usually melt completely. A higher
+      freezing level, or a moister layer below the cloud, raises that threshold.</li>
+      <li>US NWS severe criteria: hail ≥ 1 in (25 mm). "Significant" severe hail is ≥ 2 in (50 mm).</li>
       <li>New embryos keep entering the growth zone, so the storm produces a spread of sizes. The ground record
       collects the stones that survived.</li></ul>`,
     init(sim) {
@@ -1428,8 +1461,8 @@ function drawMicro(ctx, W, H, sim) {
     ctx.fillText(e.T <= -40 ? 'Too cold: every droplet has already frozen, so the stone cannot grow by accretion.'
                             : 'Almost no liquid water left at this level, so accretion has nearly stopped.', 16, 64);
   } else {
-    const label = { wet: 'WET GROWTH: water film freezes slowly into clear ice',
-                    dry: 'DRY GROWTH: droplets freeze instantly into opaque rime' }[s0.regime] || '';
+    const label = { wet: 'WET GROWTH: water arrives faster than it can freeze, so it freezes gradually into clear ice',
+                    dry: 'DRY GROWTH: droplets freeze on impact, trapping air in opaque rime' }[s0.regime] || '';
     ctx.fillStyle = s0.regime === 'wet' ? '#8cc6ff' : '#ffffff';
     ctx.font = '600 13px system-ui';
     ctx.fillText(label, 16, 64);

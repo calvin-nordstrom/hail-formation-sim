@@ -32,7 +32,7 @@ Open `index.html` in any modern browser. There is no build step and there are no
 
 | Piece | Treatment |
 | --- | --- |
-| Temperature | Dry adiabatic (9.8 °C/km) below cloud base, moist (6 °C/km) above |
+| Temperature | Dry adiabatic (9.8 °C/km) below cloud base, a constant moist rate of 6 °C/km above (the real moist adiabat ranges from about 4 to 7+ °C/km) |
 | Cloud base | LCL ≈ 125 m × (T − T<sub>d</sub>) |
 | Airflow | Stream function, so the flow is divergence-free: a Gaussian updraft core with inflow, outflow and compensating subsidence, plus drifting turbulent eddy modes inside the cloud |
 | Cloud water | Peaks in the core, is depleted toward −40 °C (glaciation), and is made patchy by entrainment |
@@ -43,6 +43,18 @@ Open `index.html` in any modern browser. There is no build step and there are no
 
 Particles are drawn much larger than their true size, and the motion in the zoomed-in view is slowed down so it is
 visible.
+
+### Known simplifications
+
+- The flow is 2-D and divergence-free (incompressible). Real storms satisfy density-weighted (anelastic)
+  continuity and are three-dimensional.
+- Ice nucleation uses a single onset temperature (−12 °C) and homogeneous freezing at −38 °C. Real
+  ice-nucleating particles become active over a range of temperatures, from about −5 to −15 °C.
+- Hail density (900 kg/m³) and drag coefficient (0.6) are held constant.
+- In wet growth, stones keep all the water they collect, with no shedding and no spongy ice. This somewhat
+  overestimates how fast large stones grow.
+- Melting uses air temperature and ignores evaporative cooling, so the wet-bulb zero height is not represented.
+- Cloud water is made patchy on purpose, to stand in for entrainment of dry air.
 
 ## Code layout
 
