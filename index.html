@@ -1463,6 +1463,7 @@ const App = {
   selectedId: null,
   dirty: false,
   pendingSeek: null,
+  scrubbing: false,
   sceneParams: {},
 };
 
@@ -1619,7 +1620,7 @@ function goTo(i) {
 let readoutTick = 0;
 function updateUI() {
   const sc = scene(), sim = App.sim;
-  if (document.activeElement !== el('timeline')) el('timeline').value = sim.t;
+  if (!App.scrubbing) el('timeline').value = sim.t;
   el('timeLabel').textContent = `storm time ${fmtClock(sim.tp)} / ${fmtClock(sc.duration * sc.timeScale)}`;
   if (readoutTick++ % 8 === 0) {
     el('readouts').innerHTML = sc.readouts(sim).map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join('');
@@ -1637,6 +1638,9 @@ el('play').onclick = () => setPlaying(!App.playing);
 el('speed').onchange = e => { App.speed = +e.target.value; };
 el('showWind').onchange = e => { App.showWind = e.target.checked; };
 el('timeline').addEventListener('input', e => { App.pendingSeek = +e.target.value; });
+// Only hold the slider still while it is being dragged; focus alone shouldn't freeze it.
+el('timeline').addEventListener('pointerdown', () => { App.scrubbing = true; });
+for (const type of ['pointerup', 'pointercancel']) window.addEventListener(type, () => { App.scrubbing = false; });
 el('reset').onclick = () => {
   storm.set(Object.fromEntries(GLOBAL_PARAMS.map(p => [p.key, p.value])));
   const sc = scene();
