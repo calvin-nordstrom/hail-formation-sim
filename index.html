@@ -203,7 +203,7 @@ const PHYS = {
   rhoIce: 900,     // kg/m^3, bulk hail density
   Cd: 0.6,         // drag coefficient of a hailstone
   Lf: 3.34e5,      // J/kg, latent heat of fusion
-  Ls: 2.83e6,      // J/kg, latent heat of sublimation
+  Lv: 2.5e6,       // J/kg, latent heat of vaporization
   cw: 4180,        // J/(kg K), specific heat of water
   ka: 0.024,       // W/(m K), thermal conductivity of air
   Dv: 2.2e-5,      // m^2/s, diffusivity of water vapor
@@ -212,7 +212,6 @@ const PHYS = {
 };
 
 const esWater = T => 611.2 * Math.exp(17.62 * T / (243.12 + T));   // Pa, Magnus
-const esIce = T => 611.2 * Math.exp(22.46 * T / (272.62 + T));     // Pa, Magnus over ice
 const vaporDensity = (e, T) => e / (PHYS.Rv * (T + 273.15));
 function dewPoint(T, RH) {
   const g = Math.log(RH / 100) + 17.62 * T / (243.12 + T);
@@ -337,16 +336,23 @@ function termVel(D, z, storm) {
   return Math.sqrt(4 * PHYS.g * D * PHYS.rhoIce / (3 * PHYS.Cd * storm.rhoAir(z)));
 }
 
-// Surface heat budget of a growing hailstone (per unit area, surface held at 0 °C).
-// Wet growth when the latent heat released exceeds what conduction + sublimation can remove.
+// Ventilated transfer number (Nusselt for heat with Pr^(1/3) ≈ 0.89, Sherwood for vapor with Sc^(1/3) ≈ 0.87).
+// Pruppacher & Rasmussen (1979) below Re = 6000; Macklin (1963) chi ≈ 0.76 for hail-sized Reynolds numbers.
+function ventilation(Re, cubeRoot) {
+  const X = Math.sqrt(Re) * cubeRoot;
+  return Re < 6000 ? 1.56 + 0.616 * X : 0.76 * X;
+}
+
+// Surface heat budget of a growing hailstone at the wet-growth limit (surface at 0 °C, liquid), per unit area.
+// Wet growth when the latent heat released exceeds what conduction + evaporation can remove.
+// In-cloud air holding supercooled water is taken as saturated with respect to liquid water.
 function surfaceHeat(D, V, z, T, lwc, storm) {
   const Re = V * D / storm.nu(z);
-  const Nu = 2 + 0.6 * Math.sqrt(Re) * 0.89;           // Pr^(1/3) ≈ 0.89
-  const hc = PHYS.ka * Nu / D;
-  const hm = PHYS.Dv * (1.225 / storm.rhoAir(z)) * Nu / D;   // diffusivity rises as pressure falls
+  const hc = PHYS.ka * ventilation(Re, 0.89) / D;
+  const hm = PHYS.Dv * (1.225 / storm.rhoAir(z)) * ventilation(Re, 0.87) / D;   // diffusivity rises as pressure falls
   const F = PHYS.E * lwc * V;                          // accreted mass flux, kg/(m^2 s)
   const dT = -T;
-  const removal = hc * dT + PHYS.Ls * hm * Math.max(0, vaporDensity(esWater(0), 0) - vaporDensity(esIce(T), T));
+  const removal = hc * dT + PHYS.Lv * hm * Math.max(0, vaporDensity(esWater(0), 0) - vaporDensity(esWater(T), T));
   const release = F * (PHYS.Lf + PHYS.cw * dT);
   return { F, hc, removal, release };
 }
@@ -386,7 +392,7 @@ function setRegime(h, r, dtp) {
 function growHail(h, storm, T, z, lwc, V, dtp) {
   if (T > 0) {
     const Re = V * h.D / storm.nu(z);
-    const hc = PHYS.ka * (2 + 0.6 * Math.sqrt(Re) * 0.89) / h.D;
+    const hc = PHYS.ka * ventilation(Re, 0.89) / h.D;
     h.D -= 2 * hc * T / (PHYS.rhoIce * PHYS.Lf) * dtp;
     h.heat = null;
     setRegime(h, 'melt', dtp);
@@ -948,7 +954,8 @@ const SCENES = [
       condensation reduces the cooling to the moist adiabatic rate. That rate is about 4 °C/km in warm, humid air
       and increases with height. The model uses a constant 6 °C/km.</li>
       <li>Cloud base for a surface-based storm is the lifting condensation level, estimated as
-      <code>LCL ≈ 125 m × (T − T<sub>d</sub>)</code>.</li>
+      <code>LCL ≈ 125 m × (T − T<sub>d</sub>)</code> (Lawrence 2005). A rising parcel cools at 9.8 °C/km while its
+      dew point falls by only about 1.8 °C/km. The gap therefore closes at about 8 °C/km, or 1 °C every 125 m.</li>
       <li>Air rising from the surface is usually lifted to its level of free convection before it becomes buoyant.
       Buoyancy above that level (CAPE) is what drives updrafts of 20–50+ m/s in severe storms.</li>
       <li>The updraft comes from a 2-D stream function, so the flow is divergence-free: low-level inflow converges
@@ -1022,15 +1029,21 @@ const SCENES = [
       are no liquid droplets left to collect.</p>`,
     sci: `<ul>
       <li>Hail embryos are mostly graupel or frozen drops. Graupel is 2–5 mm, and hail is defined as 5 mm or larger.</li>
-      <li>Accretion rate: <code>dM/dt = E·(πD²/4)·LWC·V<sub>t</sub></code>, so <code>dD/dt = E·LWC·V<sub>t</sub>/(2ρ<sub>i</sub>)</code>.
-      This uses E = 0.8 and ρ<sub>i</sub> = 900 kg/m³, and treats the droplets' own fall speed as negligible. Real hail
-      density ranges from about 700 to 900 kg/m³, and is lower for graupel and heavily rimed ice.</li>
-      <li>Fall speed: <code>V<sub>t</sub> = √(4gDρ<sub>i</sub> / 3C<sub>d</sub>ρ<sub>a</sub>)</code>, with C<sub>d</sub> = 0.6.
-      Measured drag coefficients range from about 0.45 to 0.8, depending on shape and surface roughness.</li>
+      <li>Accretion rate (continuous collection): <code>dM/dt = E·(πD²/4)·LWC·V<sub>t</sub></code>, the mass of cloud
+      water swept out by the stone's cross-section each second. With <code>M = ρ<sub>i</sub>πD³/6</code> this becomes
+      <code>dD/dt = E·LWC·V<sub>t</sub>/(2ρ<sub>i</sub>)</code>. Many textbooks write it in terms of radius instead, as
+      <code>dR/dt = E·LWC·V<sub>t</sub>/(4ρ<sub>i</sub>)</code>. The model uses E = 0.8 and ρ<sub>i</sub> = 900 kg/m³,
+      and treats the droplets' own fall speed as negligible. Real hail density ranges from about 700 to 900 kg/m³,
+      and is lower for graupel and heavily rimed ice.</li>
+      <li>Fall speed: setting weight <code>ρ<sub>i</sub>g·πD³/6</code> equal to drag
+      <code>½C<sub>d</sub>ρ<sub>a</sub>V<sub>t</sub>²·πD²/4</code> gives
+      <code>V<sub>t</sub> = √(4gDρ<sub>i</sub> / 3C<sub>d</sub>ρ<sub>a</sub>)</code>, the form used by Kumjian &amp;
+      Lombardo (2020). Buoyancy is neglected because ρ<sub>a</sub> ≪ ρ<sub>i</sub>. The model uses
+      C<sub>d</sub> = 0.6; measured values for natural hail range from about 0.45 to 0.8.</li>
       <li>Droplets near the stone follow an idealized potential flow around it. Only those with enough inertia hit it
       (inertial impaction), which is why the collection efficiency E is below 1.</li>
-      <li><b>Dry growth</b>: convection, conduction and sublimation remove the latent heat of freezing as fast as
-      accretion releases it. The surface stays below 0 °C, droplets freeze on impact, and the air trapped between
+      <li><b>Dry growth</b>: the passing air carries away the latent heat of freezing as fast as accretion releases it,
+      by ventilated conduction and by vapor loss from the surface. The surface stays below 0 °C, droplets freeze on impact, and the air trapped between
       the frozen droplets makes opaque rime.</li>
       <li><b>Wet growth</b>: past the Schumann–Ludlam limit, accretion releases more heat than the surface can lose.
       That happens with warmer air, higher LWC, or larger, faster-falling stones. The surface warms to 0 °C under a
@@ -1138,18 +1151,25 @@ const SCENES = [
       <p>In some regions droplets freeze instantly, trapping air and forming milky, <b>opaque</b> ice. In others,
       water arrives faster than it can freeze, and the wet surface freezes gradually into <b>clear</b> ice. Each
       change in conditions adds a layer, like the rings of a tree, so slicing a hailstone open reveals its history.</p>
-      <p>You may have heard that hailstones make many up-and-down trips. Research suggests most make only one or two,
-      and the layers mainly record the changing conditions along the way.</p>
+      <p>You may have heard that hailstones are tossed up and down through the storm many times. Research shows most
+      grow during a single trip up and back down. The layers record changing conditions along that path.</p>
       <p class="hint">Click a hailstone to inspect its cross-section. Raise the turbulence to see more complicated paths.</p>`,
     sci: `<ul>
       <li>The layer type comes from the surface heat balance. Latent heat released by accreted water,
-      <code>F·(L<sub>f</sub> + c<sub>w</sub>·ΔT)</code> with ΔT = 0 − T, is compared with heat lost by forced
-      convection and sublimation. Convection uses the Ranz–Marshall correlation
-      <code>Nu = 2 + 0.6·Re<sup>0.5</sup>·Pr<sup>0.33</sup></code>, and sublimation uses the analogous Sherwood number.
-      Real hailstones lose heat somewhat faster than this, because of surface roughness and tumbling.</li>
+      <code>F·(L<sub>f</sub> + c<sub>w</sub>·ΔT)</code> with ΔT = 0 − T and F = E·LWC·V<sub>t</sub>, is compared with
+      the heat the surface loses at 0 °C: <code>(k<sub>a</sub>·Nu/D)·ΔT + L<sub>v</sub>·(D<sub>v</sub>·Sh/D)·Δρ<sub>v</sub></code>.
+      This is the Schumann–Ludlam limit.</li>
+      <li>Heat transfer to the air: <code>Nu = 1.56 + 0.616·Re<sup>0.5</sup>·Pr<sup>0.33</sup></code> for Re &lt; 6000
+      (Pruppacher &amp; Rasmussen 1979), and <code>Nu = 0.76·Re<sup>0.5</sup>·Pr<sup>0.33</sup></code> for the larger
+      Reynolds numbers typical of hail (Macklin 1963; used by Kumjian &amp; Lombardo 2020). The vapor term uses the same
+      forms with Sc in place of Pr. The surface is liquid at the limit, so it loses heat by evaporation (L<sub>v</sub>), and
+      in-cloud air holding supercooled water is taken as saturated over liquid water. Rough, tumbling natural stones
+      lose heat faster still: the 0.76 rises to about 1 near Re = 5×10<sup>4</sup> (Rasmussen &amp; Heymsfield 1987).</li>
       <li>Alternating clear and opaque layers come from changes in T, LWC and V<sub>t</sub> along the trajectory.
-      Hail trajectory models and studies of hailstone layers suggest most large stones make only one or two vertical
-      cycles, so many cycles are not needed to form many layers.</li>
+      Trajectory studies from Browning &amp; Foote (1976) to Kumjian &amp; Lombardo (2020) find mostly a single
+      up-and-down pass with only modest vertical excursions. Alternating layers can form at nearly the same altitude
+      as a stone drifts between regions with different LWC or temperature. Kumjian &amp; Lombardo call the repeated
+      "recycling" picture unfounded.</li>
       <li>Cloud water in the model is deliberately patchy, to stand in for entrainment of dry air. That patchiness
       is what makes stones cross back and forth over the wet/dry limit.</li>
       <li>A new layer is also recorded when growth resumes after more than 60 s outside the growth region (for example after a dip below freezing).</li>
@@ -1219,17 +1239,24 @@ const SCENES = [
     ],
     lay: `<p>A hailstone stays aloft only while the air around it rises faster than the stone falls through it. As
       it grows, it falls faster, until the updraft can no longer hold it. Stones also fall when the storm's winds carry
-      them out of the updraft. Golf-ball-sized and larger stones can hit the ground at 100 km/h (60 mph) or more.</p>
+      them out of the updraft. Golf-ball-sized hail (1.75 in) falls at roughly 40–65 km/h (25–40 mph),
+      baseball-sized hail at 70–115 km/h (44–72 mph), and the largest stones can exceed 160 km/h (100 mph).</p>
       <p>Below the freezing level it starts to <b>melt</b>. Small stones turn into rain, while large ones reach the
       ground as hail. In the US, hail 1 inch (25 mm) or larger counts as severe.</p>
       <p class="hint">Try a stronger updraft. It holds stones up longer, so they grow larger before they fall.</p>`,
     sci: `<ul>
-      <li>A stone falls out once <code>V<sub>t</sub>(D) &gt; w</code>. The largest diameter the peak updraft can support is
+      <li>A stone falls out once <code>V<sub>t</sub>(D) &gt; w</code>. Setting V<sub>t</sub> = w and solving the
+      fall-speed formula for D gives the largest diameter the peak updraft can support,
       <code>D<sub>max</sub> = 3C<sub>d</sub>ρ<sub>a</sub>w² / (4gρ<sub>i</sub>)</code>, evaluated at the height of peak w.
+      With C<sub>d</sub> = 0.6 this formula gives somewhat higher fall speeds than the NSSL observed ranges, so
+      D<sub>max</sub> is on the conservative (small) side.
       In real storms, large hail also needs a broad updraft and a long enough stay in the hail growth zone. A strong
       but narrow updraft can carry embryos through the growth zone too quickly for them to grow.</li>
-      <li>Below 0 °C, melting follows <code>dD/dt = −2h(T − 0)/(ρ<sub>i</sub>L<sub>f</sub>)</code>, and meltwater is assumed
-      to shed. The model uses air temperature and ignores evaporative cooling. In dry air below the cloud, evaporation
+      <li>Below the 0 °C level (air warmer than 0 °C), heat <code>q = h·(T − 0)</code> per unit area melts the stone at
+      <code>dM/dt = −q·πD²/L<sub>f</sub></code>, so <code>dD/dt = −2h(T − 0)/(ρ<sub>i</sub>L<sub>f</sub>)</code> with
+      <code>h = k<sub>a</sub>·Nu/D</code>. Meltwater is assumed to shed. This keeps only the conduction term of the
+      full melting equation (Rasmussen &amp; Heymsfield 1987), which also includes vapor exchange and the heat of
+      collected drops. The model uses air temperature and ignores evaporative cooling. In dry air below the cloud, evaporation
       slows melting, which is why forecasters look at the wet-bulb zero height rather than the freezing level.</li>
       <li>With a freezing level around 3–4 km, stones smaller than roughly 5–10 mm usually melt completely. A higher
       freezing level, or a moister layer below the cloud, raises that threshold.</li>
